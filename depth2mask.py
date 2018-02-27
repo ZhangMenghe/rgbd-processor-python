@@ -163,7 +163,7 @@ def writeObstacles2File(filename, boxes, bounds):
             fp.write('o : ' + str(cxs[i])+' ' + str(cys[i]) + ' 0 90 '+str(widths[i])+' '+str(heights[i]))
             fp.write('\r\n')
 
-def main(root = 'imgs/', depthAddr = "depth.png", rawDepthAddr = "rawdepth.png", camAddr = "intrinsics.txt", outfile = "autolay_input.txt"):
+def main(root = 'C:/Projects/rgbd-processor-python/imgs/', depthAddr = "depth.png", rawDepthAddr = "rawdepth.png", camAddr = "intrinsics.txt", outfile = "autolay_input.txt"):
     with open(root+camAddr, 'r') as camf:
         cameraMatrix = processCamMat(camf.readlines())
     # cameraMatrix = np.array([[518.857901, 0.000000, 284.582449],[0.000000, 519.469611, 208.736166],[0.000000, 0.000000, 1.000000]])
