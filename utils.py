@@ -1,5 +1,20 @@
 import numpy as np
-
+import os
+def checkDirAndCreate(folder, checkNameList = ['hha','height']):
+    if not os.path.exists(folder):
+        try:
+            os.makedirs(folder)
+        except OSError as exc: # Guard against race condition
+            if exc.errno != errno.EEXIST:
+                raise
+    for folderName in checkNameList:
+        fullName = folder + '/' + folderName + '/'
+        if not os.path.exists(fullName):
+            try:
+                os.makedirs(fullName)
+            except OSError as exc: # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
 
 '''
 Input: AtA: W x H x 6
@@ -98,7 +113,7 @@ def getYDir(N, angleThresh, num_iter, y0):
 
 
 '''
-getRMatrix: Generate a rotation matrix that 
+getRMatrix: Generate a rotation matrix that
             if yf is a scalar, rotates about axis yi by yf degrees
             if yf is an axis, rotates yi to yf in the direction given by yi x yf
 Input: yi is an axis 3x1 vector

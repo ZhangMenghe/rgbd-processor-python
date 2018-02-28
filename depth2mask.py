@@ -1,13 +1,17 @@
+import warnings
+warnings.simplefilter("ignore", UserWarning)
 import numpy as np
 import cv2
 from sys import argv
+from os import listdir
+from os.path import isfile, join
 import imageio
 from matplotlib import cm
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from depthImgProcessor import processDepthImage
 from camera import processCamMat
-
+from utils import checkDirAndCreate
 # Malisiewicz et al.
 # reference:https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/
 def non_max_supression(rects, overlapThresh = 0.8):
@@ -46,7 +50,7 @@ def non_max_supression(rects, overlapThresh = 0.8):
         # delete all indexes from the index list that have
         group = np.concatenate(([last], np.where(overlap > overlapThresh)[0]))
         groupContents.append(group)
-        idxs = np.delete(idxs, group)   
+        idxs = np.delete(idxs, group)
 
     return pickIdx, groupContents
 
@@ -72,29 +76,30 @@ def getHeightMap(depthImage, missingMask, cameraMatrix):
     Y = h
     Z = pc[:,:,2]
 
+    # where each pixel will be located in 3d world
     roundX = X.astype(int)
     roundZ = Z.astype(int)
     maxX = np.max(roundX)
     maxZ = np.max(roundZ)
     minX = np.min(roundX)
     minZ = np.min(roundZ)
-
+    print(minX, maxX, minZ, maxZ)
     x_range = maxX - minX + 1
     z_range = maxZ - minZ + 1
-    
+
     mat_boundx = max(x_range, maxX+1)
     mat_boundz = max(z_range, maxZ+1)
 
-    
+
     heightMap = np.ones([mat_boundz, mat_boundx]) * np.inf
     heightMap = heightMap.astype("float")
     for i in range(height):
         for j in range(width):
-            tx = roundX[i,j]
-            tz = mat_boundz - roundZ[i,j]
+            tx = roundX[i,j] - minX
+            tz = roundZ[i,j]
             heightMap[tz,tx] = min(h[i,j], heightMap[tz,tx])
     heightMap[np.where(heightMap==np.inf)] = 0
-    heightMap = np.fliplr(heightMap)
+    heightMap = np.flipud(heightMap)
     imgbounds = [minX, maxX, minZ, maxZ]
     return heightMap, imgbounds
 
@@ -109,35 +114,57 @@ def drawBoundingBox(imgray, rects):
     for rect in rects:
         x1,y1,x2,y2 = rect
         cv2.rectangle(img, (x1,y1), (x2,y2), (0, 0, 255), 2)
-    cv2.imshow('image', img)
-
-def getObstacleMask(heightMap, area_threshold_min = 30, area_threshold_max_ratio = 0.9):
+    return img
+def getObstacleMask(heightMap, area_threshold_min_ratio = 0.005, area_threshold_max_ratio =0.9, needToDraw = False, needToStore = True):
     minv = np.min(heightMap)
     vrange = np.max(heightMap) - minv
     heightMap = (heightMap-minv)/vrange * 255
     imgray = heightMap.astype("uint8")
-
-    area_threshold_max = heightMap.shape[0] * heightMap.shape[1]*area_threshold_max_ratio
+    mapsize = heightMap.shape[0] * heightMap.shape[1]
+    area_threshold_min = mapsize * area_threshold_min_ratio
+    area_threshold_max = mapsize * area_threshold_max_ratio
+    # print(mapsize)
+    # cv2.imshow('ori', imgray)
     im_denoise = cv2.fastNlMeansDenoising(imgray, None, 15, 7, 40)
-    adp_thresh = cv2.adaptiveThreshold(im_denoise, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 5, 2)
+    ksize = int(mapsize/10000)
+    print(ksize)
+    if(ksize %2 == 0):
+        ksize-=1
+    median = cv2.medianBlur(im_denoise,ksize)
+    # cv2.imshow('median', median)
+    _,binary = cv2.threshold(median,50,255,cv2.THRESH_BINARY)
+    # cv2.imshow('binary', binary)
+    adp_thresh = cv2.adaptiveThreshold(binary, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 5, 2)
+
+    # cv2.imshow('thresh', adp_thresh)
     _, contours, _ = cv2.findContours(adp_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     clusterTooSmall = []
     boundingboxList = []
     for i, cnt in enumerate(contours):
         area = cv2.contourArea(cnt)
-        if(area<area_threshold_min or area>area_threshold_max):
+        if(area<area_threshold_min):
             clusterTooSmall.append(i)
         else:
+            # print(area)
             x,y,w,h = cv2.boundingRect(cnt)
+            if(w*h > area_threshold_max):
+                clusterTooSmall.append(i)
+                continue
             boundingboxList.append([x, y, x+w, y+h])
     # delete contours too small
     contours = np.delete(np.array(contours), clusterTooSmall)
+    if(len(boundingboxList)==0):
+        return [], None
     boundingboxes = np.array(boundingboxList)
-
     pickupIds, groupContents = non_max_supression(boundingboxes, 0.8)
     picked_boundingBox = boundingboxes[pickupIds]
-    drawBoundingBox(imgray, picked_boundingBox)
-    return picked_boundingBox
+    # picked_boundingBox = boundingboxes
+    img = drawBoundingBox(imgray, picked_boundingBox)
+    if(needToDraw):
+        cv2.imshow('image', img)
+    if(needToStore):
+        return picked_boundingBox, img
+    return picked_boundingBox, None
 
 def getopts(argv):
     opts = {}  # Empty dictionary to store key-value pairs.
@@ -156,32 +183,78 @@ def writeObstacles2File(filename, boxes, bounds):
     widths = boxes[:,2] - boxes[:,0]
     heights = boxes[:,3] - boxes[:,1]
     cxs = (boxes[:,2] + boxes[:,0]) / 2 + bounds[0]
-    cys = (boxes[:,3] + boxes[:,1]) / 2 
+    cys = (boxes[:,3] + boxes[:,1]) / 2
     cys = -(bounds[3]/2 - (cys + bounds[2]))
     with open(filename, 'a') as fp:
         for i in range(box_num):
             fp.write('o : ' + str(cxs[i])+' ' + str(cys[i]) + ' 0 90 '+str(widths[i])+' '+str(heights[i]))
             fp.write('\r\n')
 
-def main(root = 'C:/Projects/rgbd-processor-python/imgs/', depthAddr = "depth.png", rawDepthAddr = "rawdepth.png", camAddr = "intrinsics.txt", outfile = "autolay_input.txt"):
-    with open(root+camAddr, 'r') as camf:
+def setupInputMatrix(depthAddr, rawDepthAddr,camAddr):
+    root = 'C:/Projects/rgbd-processor-python/imgs/'
+    depthName = "depth.png"
+    rawDepthName = "rawdepth.png"
+    camName = "intrinsics.txt"
+    depthAddr = root+depthName if depthAddr == None else depthAddr
+    rawDepthAddr = root+rawDepthName if rawDepthAddr==None else rawDepthAddr
+    camAddr = root+camName if camAddr == None else camAddr
+    with open(camAddr, 'r') as camf:
         cameraMatrix = processCamMat(camf.readlines())
     # cameraMatrix = np.array([[518.857901, 0.000000, 284.582449],[0.000000, 519.469611, 208.736166],[0.000000, 0.000000, 1.000000]])
-    depthImage = imageio.imread(root+depthAddr).astype(float)/100
-    rawDepth = imageio.imread(root+rawDepthAddr).astype(float)/1000
+    depthImage = imageio.imread(depthAddr).astype(float)/100
+    rawDepth = imageio.imread(rawDepthAddr).astype(float)/1000
     missingMask = (rawDepth == 0)
+    return depthImage,missingMask,cameraMatrix
 
-    heightMap,imgbounds = getHeightMap(depthImage,rawDepth,cameraMatrix)
-    obstacles = getObstacleMask(heightMap)
+def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None):
+    depthImage,missingMask,cameraMatrix = setupInputMatrix(depthAddr, rawDepthAddr,camAddr)
+    heightMap,imgbounds = getHeightMap(depthImage,missingMask,cameraMatrix)
+    if(heightMapFile != None):
+        imageio.imwrite(heightMapFile, heightMap)
+    obstacles, imageWithBox= getObstacleMask(heightMap,needToDraw = True)
+    if(len(obstacles) == 0):
+        return
+    if(resutlFile!=None):
+        cv2.imwrite(resutlFile, imageWithBox)
     writeObstacles2File(outfile, obstacles, imgbounds)
     cv2.waitKey(0)
 
 if __name__ == "__main__":
-    if(len(argv)<2):
-        main()
-    else:
-        args = getopts(argv)
-        main(root = args["--root"], depthAddr = args["--depth"], rawDepth = args["--raw"], camAddr=args["--cam"], outfile=args["--out"])
-    # if '-i' in args:  # Example usage.
-    #     print(myargs['-i'])
-    
+    main()
+    rootpath = 'C:/Projects/SUNRGB-dataset/'
+    outputpath = 'imgs/'
+    chooseSplit = "testing"
+    startIdx =1861
+    testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
+    offsetTestList = testList - startIdx
+    numOfTest = max(offsetTestList)
+    olderr = np.seterr(all='ignore')
+    try:
+        fp = open(rootpath+'nyud2_testing.txt', 'r')
+        filenameSet = fp.readlines()
+    finally:
+        fp.close()
+    checkDirAndCreate(outputpath + chooseSplit, checkNameList = ['mask','res'])
+    for idx, file in enumerate(filenameSet):
+        if(idx>numOfTest):
+            break
+        if(idx not in offsetTestList):
+            continue
+        split_items = file.split('/')
+        camAddr = rootpath + '/'.join(p for p in split_items[:-2]) + '/intrinsics.txt'
+        depthAddr_root  = rootpath + '/'.join(p for p in split_items[:-2]) + '/depth_bfx/' #+ split_items[-1].split('.')[0]+'_abs.png'
+        rawDepthAddr_root = rootpath + '/'.join(p for p in split_items[:-2]) + '/depth/' #+ split_items[-1].split('.')[0]+'_abs.png'
+
+        depthAddr = [depthAddr_root + f for f in listdir(depthAddr_root) if isfile(join(depthAddr_root,f ))][0]
+        rawDepthAddr = [rawDepthAddr_root  +  f for f in listdir(rawDepthAddr_root) if isfile(join(rawDepthAddr_root,f ))][0]
+        heightFile = outputpath + chooseSplit+"/mask/"+str(idx+startIdx)+".png"
+        resFile =  outputpath + chooseSplit+"/res/"+str(idx+startIdx)+".png"
+        main(depthAddr, rawDepthAddr, camAddr, heightMapFile =heightFile,resutlFile=resFile )
+# if __name__ == "__main__":
+#     if(len(argv)<2):
+#         main()
+#     else:
+#         args = getopts(argv)
+#         main(root = args["--root"], depthAddr = args["--depth"], rawDepth = args["--raw"], camAddr=args["--cam"], outfile=args["--out"])
+#     # if '-i' in args:  # Example usage.
+#     #     print(myargs['-i'])

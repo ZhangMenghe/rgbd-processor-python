@@ -1,18 +1,15 @@
-
 import scipy.io as spio
 import numpy as np
 import imageio
 import math
-import os
 from os import listdir
 from os.path import isfile, join
 from matplotlib import cm
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from camera import cropCamera,getCameraParam
+from camera import cropCamera,getCameraParam, processCamMat
 from depthImgProcessor import processDepthImage
-
-
+from utils import checkDirAndCreate
 def getHHAImg(depthImage, missingMask,cameraMatrix):
     pc, N, yDir, h, R = processDepthImage(depthImage * 100, missingMask, cameraMatrix)
 
@@ -62,36 +59,6 @@ def getHeightMap(depthImage, missingMask,cameraMatrix):
     fig.colorbar(surf, shrink=0.5, aspect=5)
     plt.show()
 
-def processCamMat(strList):
-    if(len(strList) == 1):
-        numbers = np.array([strList[0].split(' ')[:9]]).astype(float)
-        mat = np.reshape(numbers,[3,3], 'C')
-    else:
-        mat = np.zeros([3,3])
-        for idx, line in enumerate(strList):
-            line = line.rstrip() #rstrip() returns a copy of the string in which all chars have been stripped from the end of the string (default whitespace characters).
-            numbers = line.split(' ')
-            mat[idx,:] = np.array([numbers]).astype(float)
-    return mat
-def checkDirAndCreate(folder):
-    if not os.path.exists(folder):
-        try:
-            os.makedirs(folder)
-        except OSError as exc: # Guard against race condition
-            if exc.errno != errno.EEXIST:
-                raise
-    if not os.path.exists(folder + '/hha/'):
-        try:
-            os.makedirs(folder + '/hha/')
-        except OSError as exc: # Guard against race condition
-            if exc.errno != errno.EEXIST:
-                raise
-    if not os.path.exists(folder + '/height/'):
-      try:
-          os.makedirs(folder + '/height/')
-      except OSError as exc: # Guard against race condition
-          if exc.errno != errno.EEXIST:
-              raise
 def main():
     rootpath = 'C:/Projects/SUNRGB-dataset/'
     outputpath = 'imgs/'
