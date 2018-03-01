@@ -247,32 +247,23 @@ def setupInputMatrix(depthAddr, rawDepthAddr,camAddr):
     return depthImage,missingMask,cameraMatrix
 def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = "label.png", fwRemovalRatio=0.8):
     labelImg = cv2.imread(labelImgName, 0)
-    labelImg = cv2.resize(labelImg, (img2Height.shape[1], img2Height.shape[0]), interpolation=cv2.INTER_NEAREST)
-    labelImg= labelImg.astype(int)
-    heightMapMsk = np.zeros(height2Img.shape)
+    labelImg = cv2.resize(labelImg, (img2Height.shape[1], img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
+    heightMapMsk = []
+    # heightMapMsk = np.zeros(height2Img.shape)
     clusterWrong = []
-
+    boundx = height2Img[-1]
     for idx, cnt in enumerate(contours):
         box = obstaclBoxes[idx]
         check_img_loc_list = []
-        print(box)
         for tz in range(box[1], box[3]):
             for tx in range(box[0], box[2]):
-                # if(cv2.pointPolygonTest(cnt, (tz,tx), False)):
-                    # print (height2Img[tz,tx])
-                    check_img_loc_list.append(height2Img[tz,tx])
+                    check_img_loc_list.extend(height2Img[tz*boundx + tx])
+
         checkImgColor = labelImg.flatten()[check_img_loc_list]
         # remove if wall and floor is accounts for the most part
-        # print(cv2.contourArea(cnt))
-        # print((box[3]-box[1]) * (box[2]-box[0]))
-        # print(np.unique(checkImgColor))
-        # # for color in np.unique(checkImgColor):
-            # print(len(np.where(checkImgColor == color)[0]))
-        print(len(checkImgColor))
-        label_5 =len(np.where(checkImgColor == 5)[0])
+        label_5 =len(np.where(checkImgColor ==5)[0])
         label_12 = len(np.where(checkImgColor == 12)[0])
-        label_1 = len(np.where(checkImgColor == 1)[0])
-        print(label_1, label_5, label_12)
+
         fwRatio = (label_5+label_12) / len(checkImgColor)
         print(fwRatio)
         if(fwRatio > fwRemovalRatio):
@@ -287,8 +278,8 @@ def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgNa
         box = cv2.boxPoints(rect)
         box = np.int0(box)
         rotateboxList.append(box)
-    cv2.drawContours(heightMapMsk, rotateboxList, -1, 1)
-    return obstacles, heightMapMsk
+    # cv2.drawContours(heightMapMsk, rotateboxList, -1, 1)
+    return obstacles, rotateboxList, heightMapMsk
 def debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,img2Height):
     boundx = height2Img[-1]
     for idx, cnt in enumerate(contours):
@@ -296,9 +287,11 @@ def debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,
         draw_list = []
         for tz in range(box[1], box[3]):
             for tx in range(box[0], box[2]):
-                draw_list.extend(height2Img[tz*boundx + tx])
-        # checkImgColor = depthImage.flatten()[draw_list]
-        # print(draw_list)
+                    draw_list.extend(height2Img[tz*boundx + tx])
+
+        # label_5 =len(np.where(checkImgColor == 5)[0])
+        # label_12 = len(np.where(checkImgColor == 12)[0])
+
         test = depthImage.flatten()
         test = np.copy(depthImage).astype(np.uint8).flatten()
         test[draw_list] = 255
@@ -314,12 +307,13 @@ def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay
     contours, obstaclBoxes, imageWithBox= getObstacleMask(heightMap,needToDraw = False)
     if(len(obstaclBoxes) == 0):
         return
-    debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,img2Height)
+    # debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,img2Height)
     # refined results with labels from NN result
-    # obstacles, heightMapMsk = getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = labelFile)
-
-    if(resutlFile!=None):
-        cv2.imwrite(resutlFile, imageWithBox)
+    obstacles, rotatedBox, heightMapMsk = getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = labelFile)
+    cv2.drawContours(imageWithBox, rotatedBox, -1, (255,255,0),2)
+    cv2.imshow("result", imageWithBox)
+    # if(resutlFile!=None):
+    #     cv2.imwrite(resutlFile, imageWithBox)
     # writeObstacles2File(outfile, obstacles, imgbounds)
     cv2.waitKey(0)
 
@@ -328,8 +322,8 @@ if __name__ == "__main__":
     outputpath = 'imgs/'
     chooseSplit = "testing"
     startIdx =1861
-    testList=np.array([1970,1972])
-    # testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
+    #testList=np.array([1970,1972])
+    testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
     offsetTestList = testList - startIdx
     numOfTest = max(offsetTestList)
     olderr = np.seterr(all='ignore')
