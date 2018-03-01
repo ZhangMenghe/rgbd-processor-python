@@ -12,6 +12,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from depthImgProcessor import processDepthImage
 from camera import processCamMat
 from utils import checkDirAndCreate
+
 # Malisiewicz et al.
 # reference:https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/
 def non_max_supression(rects, overlapThresh = 0.8):
@@ -69,7 +70,6 @@ def plot3dHeightMap(mat_boundx, mat_boundz, heightMap):
 
 def getHeightMap(depthImage, missingMask, cameraMatrix):
     height, width = depthImage.shape
-
     pc, N, yDir, h, R = processDepthImage(depthImage, missingMask, cameraMatrix)
 
     X = pc[:,:,0]
@@ -83,7 +83,7 @@ def getHeightMap(depthImage, missingMask, cameraMatrix):
     maxZ = np.max(roundZ)
     minX = np.min(roundX)
     minZ = np.min(roundZ)
-    print(minX, maxX, minZ, maxZ)
+    # print(minX, maxX, minZ, maxZ)
     x_range = maxX - minX + 1
     z_range = maxZ - minZ + 1
 
@@ -91,17 +91,23 @@ def getHeightMap(depthImage, missingMask, cameraMatrix):
     mat_boundz = max(z_range, maxZ+1)
 
 
-    heightMap = np.ones([mat_boundz, mat_boundx]) * np.inf
-    heightMap = heightMap.astype("float")
+    heightMap = np.ones([mat_boundz, mat_boundx], dtype ="float") * np.inf
+
+    height2Img = np.zeros(heightMap.shape, dtype=int)
+    img2Height = np.zeros(depthImage.shape, dtype=int)
+
     for i in range(height):
         for j in range(width):
             tx = roundX[i,j] - minX
             tz = roundZ[i,j]
-            heightMap[tz,tx] = min(h[i,j], heightMap[tz,tx])
+            img2Height[i,j] = tz * mat_boundx + tx
+            if h[i,j]<heightMap[tz,tx]:
+                heightMap[tz,tx] = h[i,j]
+                height2Img[tz,tx] = i * width + j
     heightMap[np.where(heightMap==np.inf)] = 0
     heightMap = np.flipud(heightMap)
     imgbounds = [minX, maxX, minZ, maxZ]
-    return heightMap, imgbounds
+    return heightMap, imgbounds, height2Img, img2Height
 
 def writeHeights2txtfile(outfilename, heightMap):
     with open(outfilename, "w")  as outfile:
@@ -127,19 +133,29 @@ def getObstacleMask(heightMap, area_threshold_min_ratio = 0.005, area_threshold_
     # cv2.imshow('ori', imgray)
     im_denoise = cv2.fastNlMeansDenoising(imgray, None, 15, 7, 40)
     ksize = int(mapsize/10000)
-    print(ksize)
     if(ksize %2 == 0):
         ksize-=1
-    median = cv2.medianBlur(im_denoise,ksize)
-    # cv2.imshow('median', median)
-    _,binary = cv2.threshold(median,50,255,cv2.THRESH_BINARY)
+    im_median = cv2.medianBlur(im_denoise,ksize)
+    # cv2.imshow('median', im_median)
+    _,binary = cv2.threshold(im_median,50,255,cv2.THRESH_BINARY)
     # cv2.imshow('binary', binary)
-    adp_thresh = cv2.adaptiveThreshold(binary, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 5, 2)
+
+    # structureElem = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
+    # mask = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, structureElem)
+    # im_close = binary * mask
+    kernel = np.ones((7,7),np.uint8)
+    dilation = cv2.dilate(binary,kernel,iterations = 1)
+    # cv2.imshow('dilation', dilation)
+
+
+    adp_thresh = cv2.adaptiveThreshold(dilation, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 5, 2)
 
     # cv2.imshow('thresh', adp_thresh)
+
     _, contours, _ = cv2.findContours(adp_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     clusterTooSmall = []
     boundingboxList = []
+    rotateboxList = []
     for i, cnt in enumerate(contours):
         area = cv2.contourArea(cnt)
         if(area<area_threshold_min):
@@ -151,20 +167,37 @@ def getObstacleMask(heightMap, area_threshold_min_ratio = 0.005, area_threshold_
                 clusterTooSmall.append(i)
                 continue
             boundingboxList.append([x, y, x+w, y+h])
+            # rotated rectangle
+            '''
+            rect: a Box2D structure which contains :
+            ( center (x,y), (width, height), angle of rotation ).
+            But to draw this rectangle, we need 4 corners of the rectangle.
+            It is obtained by the function cv2.boxPoints()
+            '''
+            rect = cv2.minAreaRect(cnt)
+            box = cv2.boxPoints(rect)
+            box = np.int0(box)
+            rotateboxList.append(box)
     # delete contours too small
     contours = np.delete(np.array(contours), clusterTooSmall)
+
     if(len(boundingboxList)==0):
-        return [], None
+        return contours, [], None
     boundingboxes = np.array(boundingboxList)
+    rotateboxes = np.array(rotateboxList)
     pickupIds, groupContents = non_max_supression(boundingboxes, 0.8)
+    contours = contours[pickupIds]
     picked_boundingBox = boundingboxes[pickupIds]
     # picked_boundingBox = boundingboxes
     img = drawBoundingBox(imgray, picked_boundingBox)
+    img = cv2.drawContours(img, rotateboxes[pickupIds], -1, (0,255,0), 1)
+    # img = drawRotatedBox(img, rotateboxList[pickupIds])
     if(needToDraw):
         cv2.imshow('image', img)
+        cv2.waitKey(0)
     if(needToStore):
-        return picked_boundingBox, img
-    return picked_boundingBox, None
+        return contours, picked_boundingBox, img
+    return contours, picked_boundingBox, None
 
 def getopts(argv):
     opts = {}  # Empty dictionary to store key-value pairs.
@@ -205,27 +238,73 @@ def setupInputMatrix(depthAddr, rawDepthAddr,camAddr):
     rawDepth = imageio.imread(rawDepthAddr).astype(float)/1000
     missingMask = (rawDepth == 0)
     return depthImage,missingMask,cameraMatrix
+def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = "label.png", fwRemovalRatio=0.8):
+    labelImg = cv2.imread(labelImgName, 0)
+    labelImg = cv2.resize(labelImg, (img2Height.shape[1], img2Height.shape[0]), interpolation=cv2.INTER_NEAREST)
+    labelImg= labelImg.astype(int)
+    heightMapMsk = np.zeros(height2Img.shape)
+    clusterWrong = []
 
-def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None):
+    for idx, cnt in enumerate(contours):
+        box = obstaclBoxes[idx]
+        check_img_loc_list = []
+        print(box)
+        for tz in range(box[1], box[3]):
+            for tx in range(box[0], box[2]):
+                # if(cv2.pointPolygonTest(cnt, (tz,tx), False)):
+                    # print (height2Img[tz,tx])
+                    check_img_loc_list.append(height2Img[tz,tx])
+        checkImgColor = labelImg.flatten()[check_img_loc_list]
+        # remove if wall and floor is accounts for the most part
+        # print(cv2.contourArea(cnt))
+        # print((box[3]-box[1]) * (box[2]-box[0]))
+        # print(np.unique(checkImgColor))
+        # # for color in np.unique(checkImgColor):
+            # print(len(np.where(checkImgColor == color)[0]))
+        print(len(checkImgColor))
+        label_5 =len(np.where(checkImgColor == 5)[0])
+        label_12 = len(np.where(checkImgColor == 12)[0])
+        label_1 = len(np.where(checkImgColor == 1)[0])
+        print(label_1, label_5, label_12)
+        fwRatio = (label_5+label_12) / len(checkImgColor)
+        print(fwRatio)
+        if(fwRatio > fwRemovalRatio):
+            clusterWrong.append(idx)
+    print("----")
+    contours = np.delete(contours, clusterWrong)
+    obstacles =  np.delete(obstaclBoxes, clusterWrong)
+    rotateboxList = []
+    # consider how to join closing item?
+    for i, cnt in enumerate(contours):
+        rect = cv2.minAreaRect(cnt)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        rotateboxList.append(box)
+    cv2.drawContours(heightMapMsk, rotateboxList, -1, 1)
+    return obstacles, heightMapMsk
+def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None):
     depthImage,missingMask,cameraMatrix = setupInputMatrix(depthAddr, rawDepthAddr,camAddr)
-    heightMap,imgbounds = getHeightMap(depthImage,missingMask,cameraMatrix)
+    heightMap,imgbounds, height2Img, img2Height = getHeightMap(depthImage,missingMask,cameraMatrix)
     if(heightMapFile != None):
         imageio.imwrite(heightMapFile, heightMap)
-    obstacles, imageWithBox= getObstacleMask(heightMap,needToDraw = True)
-    if(len(obstacles) == 0):
+    contours, obstaclBoxes, imageWithBox= getObstacleMask(heightMap,needToDraw = False)
+    if(len(obstaclBoxes) == 0):
         return
+    # refined results with labels from NN result
+    obstacles, heightMapMsk = getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = labelFile)
+
     if(resutlFile!=None):
         cv2.imwrite(resutlFile, imageWithBox)
-    writeObstacles2File(outfile, obstacles, imgbounds)
+    # writeObstacles2File(outfile, obstacles, imgbounds)
     cv2.waitKey(0)
 
 if __name__ == "__main__":
-    main()
     rootpath = 'C:/Projects/SUNRGB-dataset/'
     outputpath = 'imgs/'
     chooseSplit = "testing"
     startIdx =1861
-    testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
+    testList=np.array([1970,1972])
+    # testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
     offsetTestList = testList - startIdx
     numOfTest = max(offsetTestList)
     olderr = np.seterr(all='ignore')
@@ -249,7 +328,8 @@ if __name__ == "__main__":
         rawDepthAddr = [rawDepthAddr_root  +  f for f in listdir(rawDepthAddr_root) if isfile(join(rawDepthAddr_root,f ))][0]
         heightFile = outputpath + chooseSplit+"/mask/"+str(idx+startIdx)+".png"
         resFile =  outputpath + chooseSplit+"/res/"+str(idx+startIdx)+".png"
-        main(depthAddr, rawDepthAddr, camAddr, heightMapFile =heightFile,resutlFile=resFile )
+        lFile = outputpath + '/pred/pred'+str(idx+startIdx) +'.png'
+        main(depthAddr, rawDepthAddr, camAddr, heightMapFile =heightFile,resutlFile=resFile, labelFile = lFile )
 # if __name__ == "__main__":
 #     if(len(argv)<2):
 #         main()
