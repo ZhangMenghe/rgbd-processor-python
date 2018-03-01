@@ -93,17 +93,24 @@ def getHeightMap(depthImage, missingMask, cameraMatrix):
 
     heightMap = np.ones([mat_boundz, mat_boundx], dtype ="float") * np.inf
 
-    height2Img = np.zeros(heightMap.shape, dtype=int)
+    # height2Img = np.zeros(heightMap.shape, dtype=int)
+    height2Img = dict.fromkeys(range(len(heightMap.flatten())), [])
+    height2Img[-1] = mat_boundx
     img2Height = np.zeros(depthImage.shape, dtype=int)
 
     for i in range(height):
         for j in range(width):
             tx = roundX[i,j] - minX
             tz = roundZ[i,j]
-            img2Height[i,j] = tz * mat_boundx + tx
+            # boudz-z cause we will flipup heightMap later
+            idx_height = (mat_boundz - tz) * mat_boundx + tx
+            img2Height[i,j] = idx_height
+            if(height2Img[idx_height]):
+                height2Img[idx_height].append(i*width + j)
+            else:
+                height2Img[idx_height] = [i*width + j]
             if h[i,j]<heightMap[tz,tx]:
                 heightMap[tz,tx] = h[i,j]
-                height2Img[tz,tx] = i * width + j
     heightMap[np.where(heightMap==np.inf)] = 0
     heightMap = np.flipud(heightMap)
     imgbounds = [minX, maxX, minZ, maxZ]
@@ -282,6 +289,23 @@ def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgNa
         rotateboxList.append(box)
     cv2.drawContours(heightMapMsk, rotateboxList, -1, 1)
     return obstacles, heightMapMsk
+def debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,img2Height):
+    boundx = height2Img[-1]
+    for idx, cnt in enumerate(contours):
+        box = obstaclBoxes[idx]
+        draw_list = []
+        for tz in range(box[1], box[3]):
+            for tx in range(box[0], box[2]):
+                draw_list.extend(height2Img[tz*boundx + tx])
+        # checkImgColor = depthImage.flatten()[draw_list]
+        # print(draw_list)
+        test = depthImage.flatten()
+        test = np.copy(depthImage).astype(np.uint8).flatten()
+        test[draw_list] = 255
+        test=test.reshape(img2Height.shape)
+        # imageio.imwrite(heightMapFile, heightMap)
+        cv2.imshow("test"+str(idx), test)
+        cv2.waitKey(0)
 def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None):
     depthImage,missingMask,cameraMatrix = setupInputMatrix(depthAddr, rawDepthAddr,camAddr)
     heightMap,imgbounds, height2Img, img2Height = getHeightMap(depthImage,missingMask,cameraMatrix)
@@ -290,8 +314,9 @@ def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay
     contours, obstaclBoxes, imageWithBox= getObstacleMask(heightMap,needToDraw = False)
     if(len(obstaclBoxes) == 0):
         return
+    debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,img2Height)
     # refined results with labels from NN result
-    obstacles, heightMapMsk = getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = labelFile)
+    # obstacles, heightMapMsk = getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = labelFile)
 
     if(resutlFile!=None):
         cv2.imwrite(resutlFile, imageWithBox)
