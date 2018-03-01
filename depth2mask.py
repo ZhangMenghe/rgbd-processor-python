@@ -128,7 +128,7 @@ def drawBoundingBox(imgray, rects):
         x1,y1,x2,y2 = rect
         cv2.rectangle(img, (x1,y1), (x2,y2), (0, 0, 255), 2)
     return img
-def getObstacleMask(heightMap, area_threshold_min_ratio = 0.005, area_threshold_max_ratio =0.9, needToDraw = False, needToStore = True):
+def getObstacleMask(heightMap, area_threshold_min_ratio = 0.005, area_threshold_max_ratio =0.9):
     minv = np.min(heightMap)
     vrange = np.max(heightMap) - minv
     heightMap = (heightMap-minv)/vrange * 255
@@ -162,7 +162,6 @@ def getObstacleMask(heightMap, area_threshold_min_ratio = 0.005, area_threshold_
     _, contours, _ = cv2.findContours(adp_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     clusterTooSmall = []
     boundingboxList = []
-    rotateboxList = []
     for i, cnt in enumerate(contours):
         area = cv2.contourArea(cnt)
         if(area<area_threshold_min):
@@ -174,37 +173,18 @@ def getObstacleMask(heightMap, area_threshold_min_ratio = 0.005, area_threshold_
                 clusterTooSmall.append(i)
                 continue
             boundingboxList.append([x, y, x+w, y+h])
-            # rotated rectangle
-            '''
-            rect: a Box2D structure which contains :
-            ( center (x,y), (width, height), angle of rotation ).
-            But to draw this rectangle, we need 4 corners of the rectangle.
-            It is obtained by the function cv2.boxPoints()
-            '''
-            rect = cv2.minAreaRect(cnt)
-            box = cv2.boxPoints(rect)
-            box = np.int0(box)
-            rotateboxList.append(box)
+
     # delete contours too small
     contours = np.delete(np.array(contours), clusterTooSmall)
 
     if(len(boundingboxList)==0):
-        return contours, [], None
+        return [], []
+    # Do non-maximum supression
     boundingboxes = np.array(boundingboxList)
-    rotateboxes = np.array(rotateboxList)
     pickupIds, groupContents = non_max_supression(boundingboxes, 0.8)
     contours = contours[pickupIds]
     picked_boundingBox = boundingboxes[pickupIds]
-    # picked_boundingBox = boundingboxes
-    img = drawBoundingBox(imgray, picked_boundingBox)
-    img = cv2.drawContours(img, rotateboxes[pickupIds], -1, (0,255,0), 1)
-    # img = drawRotatedBox(img, rotateboxList[pickupIds])
-    if(needToDraw):
-        cv2.imshow('image', img)
-        cv2.waitKey(0)
-    if(needToStore):
-        return contours, picked_boundingBox, img
-    return contours, picked_boundingBox, None
+    return contours, picked_boundingBox
 
 def getopts(argv):
     opts = {}  # Empty dictionary to store key-value pairs.
@@ -245,12 +225,13 @@ def setupInputMatrix(depthAddr, rawDepthAddr,camAddr):
     rawDepth = imageio.imread(rawDepthAddr).astype(float)/1000
     missingMask = (rawDepth == 0)
     return depthImage,missingMask,cameraMatrix
+
 def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = "label.png", fwRemovalRatio=0.8):
     labelImg = cv2.imread(labelImgName, 0)
     labelImg = cv2.resize(labelImg, (img2Height.shape[1], img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
     heightMapMsk = []
     # heightMapMsk = np.zeros(height2Img.shape)
-    clusterWrong = []
+    keepCluster = []
     boundx = height2Img[-1]
     for idx, cnt in enumerate(contours):
         box = obstaclBoxes[idx]
@@ -265,14 +246,18 @@ def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgNa
         label_12 = len(np.where(checkImgColor == 12)[0])
 
         fwRatio = (label_5+label_12) / len(checkImgColor)
-        print(fwRatio)
-        if(fwRatio > fwRemovalRatio):
-            clusterWrong.append(idx)
-    print("----")
-    contours = np.delete(contours, clusterWrong)
-    obstacles =  np.delete(obstaclBoxes, clusterWrong)
+        if(fwRatio < fwRemovalRatio):
+            keepCluster.append(idx)
+    contours = contours[keepCluster]
+    obstacles = obstaclBoxes[keepCluster]
     rotateboxList = []
-    # consider how to join closing item?
+    # rotated rectangle
+    '''
+    rect: a Box2D structure which contains :
+    ( center (x,y), (width, height), angle of rotation ).
+    But to draw this rectangle, we need 4 corners of the rectangle.
+    It is obtained by the function cv2.boxPoints()
+    '''
     for i, cnt in enumerate(contours):
         rect = cv2.minAreaRect(cnt)
         box = cv2.boxPoints(rect)
@@ -302,19 +287,21 @@ def debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,
 def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None):
     depthImage,missingMask,cameraMatrix = setupInputMatrix(depthAddr, rawDepthAddr,camAddr)
     heightMap,imgbounds, height2Img, img2Height = getHeightMap(depthImage,missingMask,cameraMatrix)
+    img_height = heightMap.astype("uint8")
     if(heightMapFile != None):
         imageio.imwrite(heightMapFile, heightMap)
-    contours, obstaclBoxes, imageWithBox= getObstacleMask(heightMap,needToDraw = False)
+    contours, obstaclBoxes = getObstacleMask(heightMap)
     if(len(obstaclBoxes) == 0):
         return
     # debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,img2Height)
     # refined results with labels from NN result
     obstacles, rotatedBox, heightMapMsk = getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = labelFile)
-    cv2.drawContours(imageWithBox, rotatedBox, -1, (255,255,0),2)
+    imageWithBox = drawBoundingBox(img_height, obstaclBoxes)
+    cv2.drawContours(imageWithBox, obstacles, -1, (255,255,0),2)
     cv2.imshow("result", imageWithBox)
-    # if(resutlFile!=None):
-    #     cv2.imwrite(resutlFile, imageWithBox)
-    # writeObstacles2File(outfile, obstacles, imgbounds)
+    if(resutlFile!=None):
+        cv2.imwrite(resutlFile, imageWithBox)
+    writeObstacles2File(outfile, obstacles, imgbounds)
     cv2.waitKey(0)
 
 if __name__ == "__main__":
