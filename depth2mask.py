@@ -225,7 +225,51 @@ def setupInputMatrix(depthAddr, rawDepthAddr,camAddr):
     rawDepth = imageio.imread(rawDepthAddr).astype(float)/1000
     missingMask = (rawDepth == 0)
     return depthImage,missingMask,cameraMatrix
+def getBoxInfo(boxes):
+    centerx = (boxes[:,2] + boxes[:,0])/2.0
+    centery = (boxes[:,3] + boxes[:,1])/2.0
+    r =np.sqrt ((boxes[:,2] - boxes[:,0])**2 + (boxes[:,3] - boxes[:,1])**2)/2.0
+    return np.vstack([centerx, centery, r]).T
+def merge2Boxes(box, cbox):
+    return [min(box[0], cbox[0]), min(box[1], cbox[1]),max(box[2],cbox[2]), max(box[3],cbox[3])]
+def testHelper(boxesInfo,ratioThresh = 1):
+    for i, box in enumerate(boxesInfo):
+        for j in range(i+1, len(boxesInfo)):
+            cbox = boxesInfo[j]
+            ratio = (box[2]+cbox[2])/(np.sqrt((box[0]-cbox[0])**2+(box[1]-cbox[1])**2))
+            # print(ratio)
+            if(ratio>ratioThresh):
+                return [i,j]
+    return None
 
+def checkAndMergeBoxes(boxes):
+    boxesInfo = getBoxInfo(boxes)
+    while(True):
+        deleteLst = testHelper(boxesInfo)
+        if(deleteLst == None):
+            return boxes
+        mergeBox = merge2Boxes(boxes[deleteLst[0]],boxes[deleteLst[1]])
+        boxes = np.delete(boxes,deleteLst,axis=0)
+        boxes = np.vstack([boxes, mergeBox])
+        boxesInfo = np.delete(boxesInfo, deleteLst, axis=0)
+        boxesInfo = np.vstack([boxesInfo, getBoxInfo(np.array([mergeBox]))])
+        print (boxes.shape)
+
+def mergeObjects(boundingboxes, boxLabel, thresh = 30):
+    #check those boxed very closed to each other
+    numOfBox = len(boundingboxes)
+    numOfLabel = len(np.unique(boxLabel))
+    mergedBoxes = []
+    if(numOfLabel == numOfBox):
+        return boundingboxes
+    # print("boxLabels : " + str(boxLabel))
+    for label in np.unique(boxLabel):
+        index = np.where(boxLabel==label)
+        if(len(index[0]) == 1):
+            mergedBoxes.extend(boundingboxes[index])
+            continue
+        mergedBoxes.extend(checkAndMergeBoxes(boundingboxes[index]))
+    return np.array(mergedBoxes)
 def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = "label.png", fwRemovalRatio=0.8):
     labelImg = cv2.imread(labelImgName, 0)
     labelImg = cv2.resize(labelImg, (img2Height.shape[1], img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
@@ -233,6 +277,7 @@ def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgNa
     # heightMapMsk = np.zeros(height2Img.shape)
     keepCluster = []
     boundx = height2Img[-1]
+    boxLabel = []
     for idx, cnt in enumerate(contours):
         box = obstaclBoxes[idx]
         check_img_loc_list = []
@@ -241,15 +286,33 @@ def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgNa
                     check_img_loc_list.extend(height2Img[tz*boundx + tx])
 
         checkImgColor = labelImg.flatten()[check_img_loc_list]
-        # remove if wall and floor is accounts for the most part
-        label_5 =len(np.where(checkImgColor ==5)[0])
-        label_12 = len(np.where(checkImgColor == 12)[0])
 
+        # remove if wall and floor is accounts for the most part
+        label_5 = (checkImgColor == 5).sum()
+        label_12 = (checkImgColor == 12).sum()
         fwRatio = (label_5+label_12) / len(checkImgColor)
-        if(fwRatio < fwRemovalRatio):
-            keepCluster.append(idx)
+        if(fwRatio > fwRemovalRatio):
+            continue
+
+        # decide the obj type in this bounding box
+        objlabel = -1
+        deciderCount = 0
+        for label in np.unique(checkImgColor):
+            if(label == 5 or label == 12 or label == 0):
+                continue
+            if((checkImgColor==label).sum() > deciderCount):
+                objlabel = label
+                deciderCount = (checkImgColor==label).sum()
+        boxLabel.append(objlabel)
+        keepCluster.append(idx)
+    #now use label, to decide whether to merge those boundingboxes
+
+    obstacles = mergeObjects(obstaclBoxes[keepCluster], boxLabel)
+    # print("after Merge" + str(len(obstacles)))
+    # print(obstacles.shape)
+    # obstacles  =   obstaclBoxes[keepCluster]
+    # print(obstacles.shape)
     contours = contours[keepCluster]
-    obstacles = obstaclBoxes[keepCluster]
     rotateboxList = []
     # rotated rectangle
     '''
@@ -273,10 +336,6 @@ def debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,
         for tz in range(box[1], box[3]):
             for tx in range(box[0], box[2]):
                     draw_list.extend(height2Img[tz*boundx + tx])
-
-        # label_5 =len(np.where(checkImgColor == 5)[0])
-        # label_12 = len(np.where(checkImgColor == 12)[0])
-
         test = depthImage.flatten()
         test = np.copy(depthImage).astype(np.uint8).flatten()
         test[draw_list] = 255
@@ -293,13 +352,15 @@ def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay
     contours, obstaclBoxes = getObstacleMask(heightMap)
     if(len(obstaclBoxes) == 0):
         return
+    # print("beforeLabels" + str(obstaclBoxes.shape))
     # debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,img2Height)
     # refined results with labels from NN result
     obstacles, rotatedBox, heightMapMsk = getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = labelFile)
-    imageWithBox = drawBoundingBox(img_height, obstaclBoxes)
-    cv2.drawContours(imageWithBox, obstacles, -1, (255,255,0),2)
+    # print("obstacles" + str(obstacles.shape))
+    imageWithBox = drawBoundingBox(img_height, obstacles)
+    cv2.drawContours(imageWithBox, rotatedBox, -1, (255,255,0),2)
     cv2.imshow("result", imageWithBox)
-    if(resutlFile!=None):
+    if(resutlFile != None):
         cv2.imwrite(resutlFile, imageWithBox)
     writeObstacles2File(outfile, obstacles, imgbounds)
     cv2.waitKey(0)
