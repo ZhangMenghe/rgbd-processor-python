@@ -65,7 +65,7 @@ class depth2HeightMskHelper(object):
                     self.heightMap[tz,tx] = h[i,j]
         self.heightMap[np.where(self.heightMap==np.inf)] = 0
         self.heightMap = np.flipud(self.heightMap)
-        self.heightMatBounds = [mat_boundx, mat_boundz]
+        self.heightMatBounds = [mat_boundz, mat_boundx]
 
     def getObstacleMask(self):
         heightMap = np.copy(self.heightMap)
