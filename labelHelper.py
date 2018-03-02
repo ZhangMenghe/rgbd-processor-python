@@ -10,6 +10,7 @@ class labelHelper(object):
             return
         # imgBounds: minx, maxx, minz, maxz
         self.imgBounds = depthHelper.imgbounds
+        self.heightMatBounds = depthHelper.heightMatBounds
         self.contours = depthHelper.contours
         self.height2Img = depthHelper.height2Img
         self.img2Height = depthHelper.img2Height
@@ -25,10 +26,11 @@ class labelHelper(object):
             labelImg = self.classifier.fit("1970")
         else:
             labelImg = cv2.imread(self.labelFile, 0)
-            labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
+        labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
         heightMapMsk =[]
         keepCluster = []
-        boundx = self.height2Img[-1]
+        # boundx = self.height2Img[-1]
+        boundx = self.heightMatBounds[0]
         boxLabel = []
         for idx, cnt in enumerate(self.contours):
             box = obstaclBoxes[idx]
