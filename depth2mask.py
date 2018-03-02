@@ -8,49 +8,57 @@ from os import listdir
 from os.path import isfile, join
 import imageio
 from utils import checkDirAndCreate
-from plotHelper import drawBoundingBoxAndRotatedBox
 from depth2HeightMskHelper import *
 from labelHelper import *
 
 import sys
 sys.path.append('C:/Projects/semantic-segmentation')
 from pspClassifier import *
+class depth2maskTester(object):
+    """docstring fordepth2maskTester."""
+    def __init__(self, rootpath, labelFolderList, modelFilePath = None):
+        self.depthHelper = depth2HeightMskHelper()
+        self.classifier = pspClassifier(rootpath, labelFolderList, modelFile = modelFilePath)
+        self.labelHelper = labelHelper(classifier = self.classifier)
 
-def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None,imgName = None):
-    mdepthHelper = depth2HeightMskHelper(depthAddr, rawDepthAddr, camAddr)
-    # write heightMap without boundingbox, save as png image
-    if(heightMapFile):
-        imageio.imwrite(heightMapFile, mdepthHelper.heightMap)
-    if(mdepthHelper.detectedBoxes == 0):
-        return
+    def fit(self,depthAddr = None, rawDepthAddr = None, camAddr=None, labelFile = None, imgName = None):
+        self.depthHelper.fit(depthAddr,rawDepthAddr,camAddr)
+        if(self.depthHelper.detectedBoxes == 0):
+            return None
+        self.labelHelper.fit(self.depthHelper, labelName = imgName)
+        
+    def plotAndOutput(self,heightMapFile = None,plotOnScreen=False,outImageWithBox=None, outForInputFile = None):
+        # write heightMap without boundingbox, save as png image
+        if(heightMapFile):
+            imageio.imwrite(heightMapFile, self.depthHelper.heightMap)
 
-    data_path = "C:/Projects/SUNRGB-dataset/"
-    folderList = ['SUNRGBD-test_images/', 'testing/hha/']
-    tailTypes =  ['.jpg','.png']
-    mclassifier = pspClassifier(data_path, folderList, modelFile="E:/pspnet_sunrgbd_sun_model.pkl")
+        # plot final results on screen
+        if(plotOnScreen):
+            cv2.imshow("result", self.labelHelper.imageWithBox)
+            cv2.waitKey(0)
 
-    mlabelHelper = labelHelper(mdepthHelper, classifier = mclassifier)
-    mlabelHelper.getObstacleLabels(labelName = imgName)
-    # plot final results on screen
-    imageWithBox = drawBoundingBoxAndRotatedBox(mlabelHelper.heightMapMsk, mlabelHelper.boundingBoxes, mlabelHelper.rotatedBox)
+        # write heightMap with boundingbox and rotatedBox, save as png image
+        if(outImageWithBox):
+            cv2.imwrite(outImageWithBox, self.labelHelper.imageWithBox)
 
-    # write heightMap with boundingbox and rotatedBox, save as png image
-    if(resutlFile):
-        cv2.imwrite(resutlFile, imageWithBox)
+        # write obstacles to file as input to cpp program as o:
+        if(outForInputFile):
+            self.labelHelper.writeObstacles2File(outForInputFile)
 
-    # write obstacles to file as input to cpp program as o:
-    if(outfile):
-        mlabelHelper.writeObstacles2File(outfile)
-    cv2.waitKey(0)
 
 if __name__ == "__main__":
     rootpath = 'C:/Projects/SUNRGB-dataset/'
+    labelFolderList = ['SUNRGBD-test_images/', 'testing/hha/']
+    modelFilePath = "E:/pspnet_sunrgbd_sun_model.pkl"
+
+    d2tTester = depth2maskTester(rootpath,labelFolderList,modelFilePath)
+
+
     outputpath = 'imgs/'
     chooseSplit = "testing"
-
+    resForInputFile = "layoutParam.txt"
     startIdx = 1861
     testList=np.array([1972])
-
     # testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
     offsetTestList = testList - startIdx
     numOfTest = max(offsetTestList)
@@ -61,11 +69,13 @@ if __name__ == "__main__":
     finally:
         fp.close()
     checkDirAndCreate(outputpath + chooseSplit, checkNameList = ['mask','res'])
+
     for idx, file in enumerate(filenameSet):
         if(idx>numOfTest):
             break
         if(idx not in offsetTestList):
             continue
+
         split_items = file.split('/')
         camAddr = rootpath + '/'.join(p for p in split_items[:-2]) + '/intrinsics.txt'
         depthAddr_root  = rootpath + '/'.join(p for p in split_items[:-2]) + '/depth_bfx/' #+ split_items[-1].split('.')[0]+'_abs.png'
@@ -78,8 +88,8 @@ if __name__ == "__main__":
         resFile =  outputpath + chooseSplit+"/res/"+str(idx+startIdx)+".png"
         lFile = outputpath + '/pred/pred'+str(idx+startIdx) +'.png'
 
-
-        main(depthAddr, rawDepthAddr, camAddr, heightMapFile = heightFile, resutlFile=resFile, labelFile = lFile,imgName= str(idx+startIdx))
+        d2tTester.fit(depthAddr = depthAddr, rawDepthAddr = rawDepthAddr, camAddr=camAddr, imgName = str(idx+startIdx))
+        d2tTester.plotAndOutput(heightMapFile = heightFile,plotOnScreen=True,outImageWithBox=resFile, outForInputFile = resForInputFile)
 
 # if __name__ == "__main__":
 #     if(len(argv)<2):

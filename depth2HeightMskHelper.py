@@ -8,9 +8,9 @@ Tackle with depth images ONLY and transform depth images to heigt mask
 No labels needed for this phase
 '''
 class depth2HeightMskHelper(object):
-    def __init__(self, depthAddr = None, rawDepthAddr = None, camAddr=None):
-        self.area_threshold_min_ratio = 0.005
-        self.area_threshold_max_ratio = 0.9
+    def __init__(self,area_threshold_min_ratio = 0.005,area_threshold_max_ratio = 0.9):
+        self.area_threshold_min_ratio = area_threshold_min_ratio
+        self.area_threshold_max_ratio = area_threshold_max_ratio
         self.depthImage = None
         self.heightMap = None
         self.imgbounds = None
@@ -21,6 +21,7 @@ class depth2HeightMskHelper(object):
         self.contours = None
         self.obstaclBoxes = None
 
+    def fit(self, depthAddr = None, rawDepthAddr = None, camAddr=None):
         self.depthImage, missingMask, cameraMatrix = setupInputMatrix(depthAddr, rawDepthAddr, camAddr)
         self.getHeightMap(missingMask, cameraMatrix)
         self.getObstacleMask()

@@ -1,34 +1,42 @@
 import numpy as np
 import cv2
+from plotHelper import drawBoundingBox
 '''
 This class is used to optimize those obstacle from heightMap by classification results
 '''
 class labelHelper(object):
     """docstring for labelHelper."""
-    def __init__(self, depthHelper, classifier = None, labelFile= None, fwRemovalRatio = 0.8):
-        if(len(depthHelper.obstaclBoxes) == 0):
-            return None
+    def __init__(self, classifier = None, fwRemovalRatio = 0.8):
         # imgBounds: minx, maxx, minz, maxz
+        self.imgBounds = None
+        self.contours = None
+        self.height2Img = None
+        self.img2Height = None
+        self.classifier = classifier
+        self.fwRemovalRatio = fwRemovalRatio
+        # refined results with labels from NN result
+        self.boundingBoxes = None
+        self.boxesFromDepth = None
+        self.rotatedBox = []
+        self.heightMapMsk = None
+        self.boxLabel = []
+        self.imageWithBox = None
+        # self.getObstacleLabels()
+
+    def fit(self, depthHelper,labelName=None, labelFile=None):
         self.imgBounds = depthHelper.imgbounds
         self.contours = depthHelper.contours
         self.height2Img = depthHelper.height2Img
         self.img2Height = depthHelper.img2Height
-        self.classifier = classifier
-        self.labelFile = labelFile
-        self.fwRemovalRatio = fwRemovalRatio
-        # refined results with labels from NN result
-        self.boundingBoxes = None
         self.boxesFromDepth = depthHelper.obstaclBoxes
-        self.rotatedBox = []
         self.heightMapMsk = np.zeros(depthHelper.heightMatBounds, dtype=np.uint8)
-        self.boxLabel = []
-        # self.getObstacleLabels()
+        self.getObstacleLabels(labelName, labelFile)
 
-    def getObstacleLabels(self, labelName=None):
+    def getObstacleLabels(self, labelName, labelFile):
         if(self.classifier and labelName):
             labelImg = self.classifier.fit(labelName)
-        elif(self.labelFile):
-            labelImg = cv2.imread(self.labelFile, 0)
+        elif(labelFile):
+            labelImg = cv2.imread(labelFile, 0)
         else:
             return False
         labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
@@ -79,7 +87,13 @@ class labelHelper(object):
             box = np.int0(box)
             self.rotatedBox.append(box)
         cv2.drawContours(self.heightMapMsk, self.rotatedBox, -1, 255, thickness=-1)
+        # get image with boxes
+        self.getImageWithBox()
         return True
+    def getImageWithBox(self):
+        self.imageWithBox = np.copy(self.heightMapMsk)
+        self.imageWithBox = drawBoundingBox(self.imageWithBox, self.boundingBoxes)
+        cv2.drawContours(self.imageWithBox, self.rotatedBox, -1, (255,255,0), 2)
     def getBoxInfo(self, boxes):
         centerx = (boxes[:,2] + boxes[:,0])/2.0
         centery = (boxes[:,3] + boxes[:,1])/2.0
