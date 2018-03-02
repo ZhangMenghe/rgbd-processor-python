@@ -1,5 +1,24 @@
 import numpy as np
 import os
+import imageio
+from camera import processCamMat
+
+def setupInputMatrix(depthAddr, rawDepthAddr, camAddr):
+    root = 'C:/Projects/rgbd-processor-python/imgs/'
+    depthName = "depth.png"
+    rawDepthName = "rawdepth.png"
+    camName = "intrinsics.txt"
+    depthAddr = root+depthName if depthAddr == None else depthAddr
+    rawDepthAddr = root+rawDepthName if rawDepthAddr==None else rawDepthAddr
+    camAddr = root+camName if camAddr == None else camAddr
+    with open(camAddr, 'r') as camf:
+        cameraMatrix = processCamMat(camf.readlines())
+    # cameraMatrix = np.array([[518.857901, 0.000000, 284.582449],[0.000000, 519.469611, 208.736166],[0.000000, 0.000000, 1.000000]])
+    depthImage = imageio.imread(depthAddr).astype(float)/100
+    rawDepth = imageio.imread(rawDepthAddr).astype(float)/1000
+    missingMask = (rawDepth == 0)
+    return depthImage,missingMask,cameraMatrix
+
 def checkDirAndCreate(folder, checkNameList = ['hha','height']):
     if not os.path.exists(folder):
         try:
@@ -15,6 +34,17 @@ def checkDirAndCreate(folder, checkNameList = ['hha','height']):
             except OSError as exc: # Guard against race condition
                 if exc.errno != errno.EEXIST:
                     raise
+
+
+def getopts(argv):
+    opts = {}  # Empty dictionary to store key-value pairs.
+    while argv:  # While there are arguments left to parse...
+        if argv[0][0] == '-':  # Found a "-name value" pair.
+            opts[argv[0]] = argv[1]  # Add key and value to the dictionary.
+        argv = argv[1:]  # Reduce the argument list by copying it starting from index 1.
+    return opts
+
+
 
 '''
 Input: AtA: W x H x 6
@@ -156,3 +186,44 @@ def rotatePC(pc,R):
         res = np.reshape(res, pc.shape, 'F')
         res = np.swapaxes(np.swapaxes(res, 0, 1), 1, 2)
         return res
+# Malisiewicz et al.
+# reference:https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/
+def non_max_supression(rects, overlapThresh = 0.8):
+    if(len(rects) == 0):
+        return []
+    boxes = rects.astype("float")
+
+    pickIdx = []
+    groupContents = []
+
+    x1 = boxes[:,0]
+    y1 = boxes[:,1]
+    x2 = boxes[:,2]
+    y2 = boxes[:,3]
+    # find area and sort by y2
+    area = (x2 - x1 + 1) * (y2 - y1 + 1)
+    idxs = np.argsort(y2)
+
+    while(len(idxs)>0):
+        last = len(idxs) - 1
+        i = idxs[last]
+        pickIdx.append(i)
+        # find the largest (x, y) coordinates for the start of
+        # the bounding box and the smallest (x, y) coordinates
+        # for the end of the bounding box
+        xx1 = np.maximum(x1[i], x1[idxs[:last]])
+        yy1 = np.maximum(y1[i], y1[idxs[:last]])
+        xx2 = np.minimum(x2[i], x2[idxs[:last]])
+        yy2 = np.minimum(y2[i], y2[idxs[:last]])
+        # compute the width and height of the bounding box
+        w = np.maximum(0, xx2 - xx1 + 1)
+        h = np.maximum(0, yy2 - yy1 + 1)
+
+        # compute the ratio of overlap
+        overlap = (w * h) / area[idxs[:last]]
+        # delete all indexes from the index list that have
+        group = np.concatenate(([last], np.where(overlap > overlapThresh)[0]))
+        groupContents.append(group)
+        idxs = np.delete(idxs, group)
+
+    return pickIdx, groupContents
