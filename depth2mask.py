@@ -6,12 +6,12 @@ from sys import argv
 from os import listdir
 from os.path import isfile, join
 import imageio
-from matplotlib import cm
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+
 from depthImgProcessor import processDepthImage
 from camera import processCamMat
 from utils import checkDirAndCreate
+from write2FileHelper import writeObstacles2File
+from plotHelper import drawBoundingBox
 
 # Malisiewicz et al.
 # reference:https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/
@@ -54,19 +54,6 @@ def non_max_supression(rects, overlapThresh = 0.8):
         idxs = np.delete(idxs, group)
 
     return pickIdx, groupContents
-
-def plot3dHeightMap(mat_boundx, mat_boundz, heightMap):
-    mx,mz = np.meshgrid(np.array(range(mat_boundx)), np.array(range(mat_boundz)))
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
-    surf = ax.plot_surface(mx, mz, heightMap, cmap=cm.coolwarm,
-                           linewidth=0, antialiased=False)
-    ax.set_xlabel('width')
-    ax.set_ylabel('height')
-    ax.set_zlabel('height above ground')
-    # Add a color bar which maps values to colors.
-    fig.colorbar(surf, shrink=0.5, aspect=5)
-    plt.show()
 
 def getHeightMap(depthImage, missingMask, cameraMatrix):
     height, width = depthImage.shape
@@ -116,18 +103,7 @@ def getHeightMap(depthImage, missingMask, cameraMatrix):
     imgbounds = [minX, maxX, minZ, maxZ]
     return heightMap, imgbounds, height2Img, img2Height
 
-def writeHeights2txtfile(outfilename, heightMap):
-    with open(outfilename, "w")  as outfile:
-        for row in heightMap:
-            outfile.write(np.array_str(row).replace('\n', ''))
-            outfile.write('\r\n')
 
-def drawBoundingBox(imgray, rects):
-    img = cv2.cvtColor(imgray, cv2.COLOR_GRAY2BGR)
-    for rect in rects:
-        x1,y1,x2,y2 = rect
-        cv2.rectangle(img, (x1,y1), (x2,y2), (0, 0, 255), 2)
-    return img
 def getObstacleMask(heightMap, area_threshold_min_ratio = 0.005, area_threshold_max_ratio =0.9):
     minv = np.min(heightMap)
     vrange = np.max(heightMap) - minv
@@ -193,22 +169,6 @@ def getopts(argv):
             opts[argv[0]] = argv[1]  # Add key and value to the dictionary.
         argv = argv[1:]  # Reduce the argument list by copying it starting from index 1.
     return opts
-
-'''
-bounds: minx, maxx, minz, maxz
-'''
-def writeObstacles2File(filename, boxes, bounds):
-    boxes = boxes.astype("float")
-    box_num = boxes.shape[0]
-    widths = boxes[:,2] - boxes[:,0]
-    heights = boxes[:,3] - boxes[:,1]
-    cxs = (boxes[:,2] + boxes[:,0]) / 2 + bounds[0]
-    cys = (boxes[:,3] + boxes[:,1]) / 2
-    cys = -(bounds[3]/2 - (cys + bounds[2]))
-    with open(filename, 'a') as fp:
-        for i in range(box_num):
-            fp.write('o : ' + str(cxs[i])+' ' + str(cys[i]) + ' 0 90 '+str(widths[i])+' '+str(heights[i]))
-            fp.write('\r\n')
 
 def setupInputMatrix(depthAddr, rawDepthAddr,camAddr):
     root = 'C:/Projects/rgbd-processor-python/imgs/'
@@ -328,21 +288,7 @@ def getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgNa
         rotateboxList.append(box)
     # cv2.drawContours(heightMapMsk, rotateboxList, -1, 1)
     return obstacles, rotateboxList, heightMapMsk
-def debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,img2Height):
-    boundx = height2Img[-1]
-    for idx, cnt in enumerate(contours):
-        box = obstaclBoxes[idx]
-        draw_list = []
-        for tz in range(box[1], box[3]):
-            for tx in range(box[0], box[2]):
-                    draw_list.extend(height2Img[tz*boundx + tx])
-        test = depthImage.flatten()
-        test = np.copy(depthImage).astype(np.uint8).flatten()
-        test[draw_list] = 255
-        test=test.reshape(img2Height.shape)
-        # imageio.imwrite(heightMapFile, heightMap)
-        cv2.imshow("test"+str(idx), test)
-        cv2.waitKey(0)
+
 def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None):
     depthImage,missingMask,cameraMatrix = setupInputMatrix(depthAddr, rawDepthAddr,camAddr)
     heightMap,imgbounds, height2Img, img2Height = getHeightMap(depthImage,missingMask,cameraMatrix)
@@ -352,8 +298,6 @@ def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay
     contours, obstaclBoxes = getObstacleMask(heightMap)
     if(len(obstaclBoxes) == 0):
         return
-    # print("beforeLabels" + str(obstaclBoxes.shape))
-    # debug_drawContoursOnDepthImg(depthImage, contours, obstaclBoxes, height2Img,img2Height)
     # refined results with labels from NN result
     obstacles, rotatedBox, heightMapMsk = getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = labelFile)
     # print("obstacles" + str(obstacles.shape))
