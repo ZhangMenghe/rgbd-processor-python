@@ -16,7 +16,7 @@ import sys
 sys.path.append('C:/Projects/semantic-segmentation')
 from pspClassifier import *
 
-def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None):
+def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None,imgName = None):
     mdepthHelper = depth2HeightMskHelper(depthAddr, rawDepthAddr, camAddr)
     # write heightMap without boundingbox, save as png image
     if(heightMapFile):
@@ -30,7 +30,7 @@ def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay
     mclassifier = pspClassifier(data_path, folderList, modelFile="E:/pspnet_sunrgbd_sun_model.pkl")
 
     mlabelHelper = labelHelper(mdepthHelper, classifier = mclassifier)
-
+    mlabelHelper.getObstacleLabels(labelName = imgName)
     # plot final results on screen
     imageWithBox = drawBoundingBoxAndRotatedBox(mlabelHelper.heightMapMsk, mlabelHelper.boundingBoxes, mlabelHelper.rotatedBox)
 
@@ -49,8 +49,9 @@ if __name__ == "__main__":
     chooseSplit = "testing"
 
     startIdx = 1861
-    #testList=np.array([1970,1972])
-    testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
+    testList=np.array([1972])
+
+    # testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
     offsetTestList = testList - startIdx
     numOfTest = max(offsetTestList)
     olderr = np.seterr(all='ignore')
@@ -78,7 +79,7 @@ if __name__ == "__main__":
         lFile = outputpath + '/pred/pred'+str(idx+startIdx) +'.png'
 
 
-        main(depthAddr, rawDepthAddr, camAddr, heightMapFile = heightFile, resutlFile=resFile, labelFile = lFile )
+        main(depthAddr, rawDepthAddr, camAddr, heightMapFile = heightFile, resutlFile=resFile, labelFile = lFile,imgName= str(idx+startIdx))
 
 # if __name__ == "__main__":
 #     if(len(argv)<2):

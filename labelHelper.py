@@ -7,7 +7,7 @@ class labelHelper(object):
     """docstring for labelHelper."""
     def __init__(self, depthHelper, classifier = None, labelFile= None, fwRemovalRatio = 0.8):
         if(len(depthHelper.obstaclBoxes) == 0):
-            return
+            return None
         # imgBounds: minx, maxx, minz, maxz
         self.imgBounds = depthHelper.imgbounds
         self.contours = depthHelper.contours
@@ -18,21 +18,24 @@ class labelHelper(object):
         self.fwRemovalRatio = fwRemovalRatio
         # refined results with labels from NN result
         self.boundingBoxes = None
+        self.boxesFromDepth = depthHelper.obstaclBoxes
         self.rotatedBox = []
         self.heightMapMsk = np.zeros(depthHelper.heightMatBounds, dtype=np.uint8)
-        self.getObstacleLabels(depthHelper.obstaclBoxes)
+        self.boxLabel = []
+        # self.getObstacleLabels()
 
-    def getObstacleLabels(self, obstaclBoxes):
-        if(self.classifier):
-            labelImg = self.classifier.fit("1970")
-        else:
+    def getObstacleLabels(self, labelName=None):
+        if(self.classifier and labelName):
+            labelImg = self.classifier.fit(labelName)
+        elif(self.labelFile):
             labelImg = cv2.imread(self.labelFile, 0)
+        else:
+            return False
         labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
         keepCluster = []
-        boxLabel = []
         boundx = self.heightMapMsk.shape[1]
         for idx, cnt in enumerate(self.contours):
-            box = obstaclBoxes[idx]
+            box = self.boxesFromDepth[idx]
             check_img_loc_list = []
             for tz in range(box[1], box[3]):
                 for tx in range(box[0], box[2]):
@@ -56,11 +59,11 @@ class labelHelper(object):
                 if((checkImgColor==label).sum() > deciderCount):
                     objlabel = label
                     deciderCount = (checkImgColor==label).sum()
-            boxLabel.append(objlabel)
+            self.boxLabel.append(objlabel)
             keepCluster.append(idx)
         #now use label, to decide whether to merge those boundingboxes
 
-        self.mergeObjects(obstaclBoxes[keepCluster], boxLabel)
+        self.mergeObjects(self.boxesFromDepth[keepCluster])
 
         self.contours = self.contours[keepCluster]
         # rotated rectangle
@@ -76,6 +79,7 @@ class labelHelper(object):
             box = np.int0(box)
             self.rotatedBox.append(box)
         cv2.drawContours(self.heightMapMsk, self.rotatedBox, -1, 255, thickness=-1)
+        return True
     def getBoxInfo(self, boxes):
         centerx = (boxes[:,2] + boxes[:,0])/2.0
         centery = (boxes[:,3] + boxes[:,1])/2.0
@@ -103,21 +107,28 @@ class labelHelper(object):
             boxes = np.vstack([boxes, mergeBox])
             boxesInfo = np.delete(boxesInfo, deleteLst, axis=0)
             boxesInfo = np.vstack([boxesInfo, self.getBoxInfo(np.array([mergeBox]))])
-    def mergeObjects(self, boundingboxes, boxLabel, thresh = 30):
+
+    def mergeObjects(self, boundingboxes, thresh = 30):
         #check those boxed very closed to each other
         numOfBox = len(boundingboxes)
-        numOfLabel = len(np.unique(boxLabel))
+        numOfLabel = len(np.unique(self.boxLabel))
         mergedBoxes = []
+        mergedLables = []
         if(numOfLabel == numOfBox):
             return boundingboxes
-        # print("boxLabels : " + str(boxLabel))
-        for label in np.unique(boxLabel):
-            index = np.where(boxLabel==label)
+        for label in np.unique(self.boxLabel):
+            index = np.where(self.boxLabel==label)
             if(len(index[0]) == 1):
                 mergedBoxes.extend(boundingboxes[index])
+                mergedLables.append(label)
                 continue
-            mergedBoxes.extend(self.checkAndMergeBoxes(boundingboxes[index]))
+            addToMergedBoxes = self.checkAndMergeBoxes(boundingboxes[index])
+            mergedBoxes.extend(addToMergedBoxes)
+            mergedLables.extend(len(addToMergedBoxes) * [label])
+            print(mergedLables)
         self.boundingBoxes = np.array(mergedBoxes)
+        self.boxLabel = mergedLables
+
     def writeObstacles2File(self, filename):
         boxes = self.boundingBoxes.astype("float")
         box_num = boxes.shape[0]
