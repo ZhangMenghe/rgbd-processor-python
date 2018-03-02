@@ -8,18 +8,19 @@ class labelHelper(object):
     def __init__(self, depthHelper, classifier = None, labelFile= None, fwRemovalRatio = 0.8):
         if(len(depthHelper.obstaclBoxes) == 0):
             return
+        # imgBounds: minx, maxx, minz, maxz
+        self.imgBounds = depthHelper.imgbounds
         self.contours = depthHelper.contours
-        self.boundingBoxes = depthHelper.obstaclBoxes
         self.height2Img = depthHelper.height2Img
         self.img2Height = depthHelper.img2Height
         self.classifier = classifier
         self.labelFile = labelFile
         self.fwRemovalRatio = fwRemovalRatio
         # refined results with labels from NN result
-        self.boundingBoxes, self.rotatedBox, self.heightMapMsk = self.getObstacleLabels()
+        self.boundingBoxes, self.rotatedBox, self.heightMapMsk = self.getObstacleLabels(depthHelper.obstaclBoxes)
         self.heightMapMsk = depthHelper.heightMap
-    def getObstacleLabels(self):
-        obstaclBoxes = np.copy(self.boundingBoxes)
+
+    def getObstacleLabels(self, obstaclBoxes):
         labelImg = cv2.imread(self.labelFile, 0)
         labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
         heightMapMsk =[]
@@ -118,3 +119,15 @@ class labelHelper(object):
                 continue
             mergedBoxes.extend(self.checkAndMergeBoxes(boundingboxes[index]))
         return np.array(mergedBoxes)
+    def writeObstacles2File(self, filename):
+        boxes = self.boundingBoxes.astype("float")
+        box_num = boxes.shape[0]
+        widths = boxes[:,2] - boxes[:,0]
+        heights = boxes[:,3] - boxes[:,1]
+        cxs = (boxes[:,2] + boxes[:,0]) / 2 + self.imgBounds[0]
+        cys = (boxes[:,3] + boxes[:,1]) / 2
+        cys = -(self.imgBounds[3]/2 - (cys + self.imgBounds[2]))
+        with open(filename, 'a') as fp:
+            for i in range(box_num):
+                fp.write('o : ' + str(cxs[i])+' ' + str(cys[i]) + ' 0 90 '+str(widths[i])+' '+str(heights[i]))
+                fp.write('\r\n')

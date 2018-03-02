@@ -31,4 +31,4 @@ def drawBoundingBoxAndRotatedBox(heightMap, boundingBoxes, rotatedBox):
     imageWithBox = drawBoundingBox(img_height, boundingBoxes)
     cv2.drawContours(imageWithBox, rotatedBox, -1, (255,255,0),2)
     cv2.imshow("result", imageWithBox)
-    cv2.waitKey(0)
+    return imageWithBox

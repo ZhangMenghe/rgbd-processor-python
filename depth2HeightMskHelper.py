@@ -13,7 +13,7 @@ class depth2HeightMskHelper(object):
         self.heightMap, self.imgbounds, self.height2Img, self.img2Height = self.getHeightMap(missingMask,cameraMatrix)
 
         self.contours, self.obstaclBoxes = self.getObstacleMask()
-
+        self.detectedBoxes = len(self.obstaclBoxes)
     def getHeightMap(self, missingMask, cameraMatrix):
         height, width = self.depthImage.shape
         pc, N, yDir, h, R = processDepthImage(self.depthImage, missingMask, cameraMatrix)

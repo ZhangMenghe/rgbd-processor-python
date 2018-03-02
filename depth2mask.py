@@ -7,39 +7,30 @@ from os import listdir
 from os.path import isfile, join
 import imageio
 from utils import checkDirAndCreate
-from write2FileHelper import writeObstacles2File
 from plotHelper import drawBoundingBoxAndRotatedBox
 from depth2HeightMskHelper import *
 from labelHelper import *
 
+def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None):
+    mdepthHelper = depth2HeightMskHelper(depthAddr, rawDepthAddr, camAddr)
+    # write heightMap without boundingbox, save as png image
+    if(heightMapFile):
+        imageio.imwrite(heightMapFile, mdepthHelper.heightMap)
+    if(mdepthHelper.detectedBoxes == 0):
+        return
+    mlabelHelper = labelHelper(mdepthHelper, labelFile = lFile)
 
+    # plot final results on screen
+    imageWithBox = drawBoundingBoxAndRotatedBox(mlabelHelper.heightMapMsk, mlabelHelper.boundingBoxes, mlabelHelper.rotatedBox)
 
+    # write heightMap with boundingbox and rotatedBox, save as png image
+    if(resutlFile):
+        cv2.imwrite(resutlFile, imageWithBox)
 
-
-
-
-
-
-
-# def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None):
-#     depthImage,missingMask,cameraMatrix = setupInputMatrix(depthAddr, rawDepthAddr,camAddr)
-#     heightMap,imgbounds, height2Img, img2Height = getHeightMap(depthImage,missingMask,cameraMatrix)
-#     img_height = heightMap.astype("uint8")
-#     if(heightMapFile != None):
-#         imageio.imwrite(heightMapFile, heightMap)
-#     contours, obstaclBoxes = getObstacleMask(heightMap)
-#     if(len(obstaclBoxes) == 0):
-#         return
-#     # refined results with labels from NN result
-#     obstacles, rotatedBox, heightMapMsk = getObstacleLabels(contours, obstaclBoxes, height2Img, img2Height, labelImgName = labelFile)
-#     # print("obstacles" + str(obstacles.shape))
-#     imageWithBox = drawBoundingBox(img_height, obstacles)
-#     cv2.drawContours(imageWithBox, rotatedBox, -1, (255,255,0),2)
-#     cv2.imshow("result", imageWithBox)
-#     if(resutlFile != None):
-#         cv2.imwrite(resutlFile, imageWithBox)
-#     writeObstacles2File(outfile, obstacles, imgbounds)
-#     cv2.waitKey(0)
+    # write obstacles to file as input to cpp program as o:
+    if(outfile):
+        mlabelHelper.writeObstacles2File(outfile)
+    cv2.waitKey(0)
 
 if __name__ == "__main__":
     rootpath = 'C:/Projects/SUNRGB-dataset/'
@@ -69,13 +60,12 @@ if __name__ == "__main__":
 
         depthAddr = [depthAddr_root + f for f in listdir(depthAddr_root) if isfile(join(depthAddr_root,f ))][0]
         rawDepthAddr = [rawDepthAddr_root  +  f for f in listdir(rawDepthAddr_root) if isfile(join(rawDepthAddr_root,f ))][0]
+
         heightFile = outputpath + chooseSplit+"/mask/"+str(idx+startIdx)+".png"
         resFile =  outputpath + chooseSplit+"/res/"+str(idx+startIdx)+".png"
         lFile = outputpath + '/pred/pred'+str(idx+startIdx) +'.png'
-        # main(depthAddr, rawDepthAddr, camAddr, heightMapFile =heightFile,resutlFile=resFile, labelFile = lFile )
-        mdepthHelper = depth2HeightMskHelper(depthAddr, rawDepthAddr, camAddr)
-        mlabelHelper = labelHelper(mdepthHelper, labelFile = lFile)
-        drawBoundingBoxAndRotatedBox(mlabelHelper.heightMapMsk, mlabelHelper.boundingBoxes, mlabelHelper.rotatedBox)
+
+        main(depthAddr, rawDepthAddr, camAddr, heightMapFile = heightFile, resutlFile=resFile, labelFile = lFile )
 
 # if __name__ == "__main__":
 #     if(len(argv)<2):
