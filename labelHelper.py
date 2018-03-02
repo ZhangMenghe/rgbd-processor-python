@@ -83,6 +83,7 @@ class labelHelper(object):
         '''
         for i, cnt in enumerate(self.contours):
             rect = cv2.minAreaRect(cnt)
+            # box point: bl, tl, tr, br
             box = cv2.boxPoints(rect)
             box = np.int0(box)
             self.rotatedBox.append(box)
@@ -121,7 +122,6 @@ class labelHelper(object):
             boxes = np.vstack([boxes, mergeBox])
             boxesInfo = np.delete(boxesInfo, deleteLst, axis=0)
             boxesInfo = np.vstack([boxesInfo, self.getBoxInfo(np.array([mergeBox]))])
-
     def mergeObjects(self, boundingboxes, thresh = 30):
         #check those boxed very closed to each other
         numOfBox = len(boundingboxes)
