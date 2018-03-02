@@ -1,5 +1,6 @@
 import warnings
 warnings.simplefilter("ignore", UserWarning)
+
 import numpy as np
 import cv2
 from sys import argv
@@ -11,6 +12,10 @@ from plotHelper import drawBoundingBoxAndRotatedBox
 from depth2HeightMskHelper import *
 from labelHelper import *
 
+import sys
+sys.path.append('C:/Projects/semantic-segmentation')
+from pspClassifier import *
+
 def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay_input.txt", heightMapFile=None, resutlFile = None,labelFile = None):
     mdepthHelper = depth2HeightMskHelper(depthAddr, rawDepthAddr, camAddr)
     # write heightMap without boundingbox, save as png image
@@ -18,7 +23,13 @@ def main(depthAddr = None, rawDepthAddr = None, camAddr=None, outfile = "autolay
         imageio.imwrite(heightMapFile, mdepthHelper.heightMap)
     if(mdepthHelper.detectedBoxes == 0):
         return
-    mlabelHelper = labelHelper(mdepthHelper, labelFile = lFile)
+
+    data_path = "C:/Projects/SUNRGB-dataset/"
+    folderList = ['SUNRGBD-test_images/', 'testing/hha/']
+    tailTypes =  ['.jpg','.png']
+    mclassifier = pspClassifier(data_path, folderList, modelFile="E:/pspnet_sunrgbd_sun_model.pkl")
+
+    mlabelHelper = labelHelper(mdepthHelper, classifier = mclassifier)
 
     # plot final results on screen
     imageWithBox = drawBoundingBoxAndRotatedBox(mlabelHelper.heightMapMsk, mlabelHelper.boundingBoxes, mlabelHelper.rotatedBox)
@@ -36,6 +47,7 @@ if __name__ == "__main__":
     rootpath = 'C:/Projects/SUNRGB-dataset/'
     outputpath = 'imgs/'
     chooseSplit = "testing"
+
     startIdx = 1861
     #testList=np.array([1970,1972])
     testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
@@ -64,6 +76,7 @@ if __name__ == "__main__":
         heightFile = outputpath + chooseSplit+"/mask/"+str(idx+startIdx)+".png"
         resFile =  outputpath + chooseSplit+"/res/"+str(idx+startIdx)+".png"
         lFile = outputpath + '/pred/pred'+str(idx+startIdx) +'.png'
+
 
         main(depthAddr, rawDepthAddr, camAddr, heightMapFile = heightFile, resutlFile=resFile, labelFile = lFile )
 

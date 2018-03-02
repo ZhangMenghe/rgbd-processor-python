@@ -21,8 +21,11 @@ class labelHelper(object):
         self.heightMapMsk = depthHelper.heightMap
 
     def getObstacleLabels(self, obstaclBoxes):
-        labelImg = cv2.imread(self.labelFile, 0)
-        labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
+        if(self.classifier):
+            labelImg = self.classifier.fit("1970")
+        else:
+            labelImg = cv2.imread(self.labelFile, 0)
+            labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
         heightMapMsk =[]
         keepCluster = []
         boundx = self.height2Img[-1]
