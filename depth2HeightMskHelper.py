@@ -17,8 +17,8 @@ class depth2HeightMskHelper(object):
         self.heightMatBounds = None
         self.height2Img = None
         self.img2Height = None
-        self.detectedBoxes = None
         self.contours = None
+        self.contourHeights = []
         self.obstaclBoxes = None
 
     def fit(self, depthAddr = None, rawDepthAddr = None, camAddr=None):
@@ -100,7 +100,7 @@ class depth2HeightMskHelper(object):
 
         # cv2.imshow('thresh', adp_thresh)
 
-        _, self.contours, _ = cv2.findContours(adp_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        _, self.contours, _  = cv2.findContours(adp_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         clusterTooSmall = []
         boundingboxList = []
         for i, cnt in enumerate(self.contours):
@@ -125,4 +125,12 @@ class depth2HeightMskHelper(object):
         pickupIds, groupContents = non_max_supression(boundingboxes, 0.8)
         self.contours = self.contours[pickupIds]
         self.obstaclBoxes = boundingboxes[pickupIds]
+
         self.detectedBoxes = len(self.obstaclBoxes)
+        self.getContourHeight()
+    def getContourHeight(self):
+        for rect in self.obstaclBoxes:
+            cx = int((rect[0] + rect[2])/2)
+            cy = int((rect[1] + rect[3])/2)
+            sampler = self.heightMap[cy-5:cy+5, cx-5:cx+5]
+            self.contourHeights.append(np.average(sampler))

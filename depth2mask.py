@@ -26,7 +26,7 @@ class depth2maskTester(object):
         if(self.depthHelper.detectedBoxes == 0):
             return None
         self.labelHelper.fit(self.depthHelper, labelName = imgName)
-        
+
     def plotAndOutput(self,heightMapFile = None,plotOnScreen=False,outImageWithBox=None, outForInputFile = None):
         # write heightMap without boundingbox, save as png image
         if(heightMapFile):
@@ -89,7 +89,7 @@ if __name__ == "__main__":
         lFile = outputpath + '/pred/pred'+str(idx+startIdx) +'.png'
 
         d2tTester.fit(depthAddr = depthAddr, rawDepthAddr = rawDepthAddr, camAddr=camAddr, imgName = str(idx+startIdx))
-        d2tTester.plotAndOutput(heightMapFile = heightFile,plotOnScreen=True,outImageWithBox=resFile, outForInputFile = resForInputFile)
+        d2tTester.plotAndOutput(heightMapFile = heightFile,plotOnScreen=False,outImageWithBox=resFile, outForInputFile = resForInputFile)
 
 # if __name__ == "__main__":
 #     if(len(argv)<2):

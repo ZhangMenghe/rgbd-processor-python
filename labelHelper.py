@@ -18,14 +18,18 @@ class labelHelper(object):
         self.boundingBoxes = None
         self.boxesFromDepth = None
         self.rotatedBox = []
+        self.rotatedRect = []
         self.heightMapMsk = None
         self.boxLabel = []
+        self.mergedLables = []
+        self.mergeIdx = []
         self.imageWithBox = None
         # self.getObstacleLabels()
 
     def fit(self, depthHelper,labelName=None, labelFile=None):
         self.imgBounds = depthHelper.imgbounds
         self.contours = depthHelper.contours
+        self.contourHeights = depthHelper.contourHeights
         self.height2Img = depthHelper.height2Img
         self.img2Height = depthHelper.img2Height
         self.boxesFromDepth = depthHelper.obstaclBoxes
@@ -72,7 +76,7 @@ class labelHelper(object):
         #now use label, to decide whether to merge those boundingboxes
 
         self.mergeObjects(self.boxesFromDepth[keepCluster])
-
+        self.contourHeights = np.array(self.contourHeights)[keepCluster]
         self.contours = self.contours[keepCluster]
         # rotated rectangle
         '''
@@ -87,6 +91,7 @@ class labelHelper(object):
             box = cv2.boxPoints(rect)
             box = np.int0(box)
             self.rotatedBox.append(box)
+            self.rotatedRect.append(rect)
         cv2.drawContours(self.heightMapMsk, self.rotatedBox, -1, 255, thickness=-1)
         # get image with boxes
         self.getImageWithBox()
@@ -112,11 +117,19 @@ class labelHelper(object):
                     return [i,j]
         return None
     def checkAndMergeBoxes(self, boxes):
+        recordLst = [[x] for x in range(len(boxes))]
         boxesInfo = self.getBoxInfo(boxes)
         while(True):
             deleteLst = self.deleteTooClose(boxesInfo)
             if(deleteLst == None):
-                return boxes
+                return boxes, recordLst
+
+            if(len(recordLst)==2):
+                recordLst = [recordLst[0] + recordLst[1]]
+            else:
+                mergedItem = recordLst.pop(deleteLst[0])
+                mergedItem += recordLst.pop(deleteLst[1])
+                recordLst += [mergedItem]
             mergeBox = self.merge2Boxes(boxes[deleteLst[0]],boxes[deleteLst[1]])
             boxes = np.delete(boxes,deleteLst,axis=0)
             boxes = np.vstack([boxes, mergeBox])
@@ -125,7 +138,9 @@ class labelHelper(object):
     def mergeObjects(self, boundingboxes, thresh = 30):
         #check those boxed very closed to each other
         numOfBox = len(boundingboxes)
+
         numOfLabel = len(np.unique(self.boxLabel))
+
         mergedBoxes = []
         mergedLables = []
         if(numOfLabel == numOfBox):
@@ -136,22 +151,45 @@ class labelHelper(object):
                 mergedBoxes.extend(boundingboxes[index])
                 mergedLables.append(label)
                 continue
-            addToMergedBoxes = self.checkAndMergeBoxes(boundingboxes[index])
+            addToMergedBoxes, mergedList = self.checkAndMergeBoxes(boundingboxes[index])
             mergedBoxes.extend(addToMergedBoxes)
             mergedLables.extend(len(addToMergedBoxes) * [label])
-            print(mergedLables)
+            for lst in mergedList:
+                if(len(lst)!=1):
+                    self.mergeIdx.append(index[0][lst])
         self.boundingBoxes = np.array(mergedBoxes)
-        self.boxLabel = mergedLables
+        self.mergedLables = mergedLables
 
     def writeObstacles2File(self, filename):
+        print(self.mergeIdx)
+        print(self.contourHeights)
         boxes = self.boundingBoxes.astype("float")
-        box_num = boxes.shape[0]
-        widths = boxes[:,2] - boxes[:,0]
-        heights = boxes[:,3] - boxes[:,1]
-        cxs = (boxes[:,2] + boxes[:,0]) / 2 + self.imgBounds[0]
-        cys = (boxes[:,3] + boxes[:,1]) / 2
-        cys = -(self.imgBounds[3]/2 - (cys + self.imgBounds[2]))
+        rotatedBox = np.array(self.rotatedBox, dtype=float)
+        prefix = 'fixedObj : '
+        prefix2 = 'group: '
         with open(filename, 'a') as fp:
-            for i in range(box_num):
-                fp.write('o : ' + str(cxs[i])+' ' + str(cys[i]) + ' 0 90 '+str(widths[i])+' '+str(heights[i]))
-                fp.write('\r\n')
+            for i, rect in enumerate(self.rotatedRect):
+                content  = prefix
+                # center, size, angle
+                for idx, item in enumerate(rect):
+                    if(idx<2):
+                        content += str(item[0]) + ' ' + str(item[1]) + ' '
+                    else:
+                        content += str(item) + ' '
+                content += str(self.boxLabel[i]) + ' ' + str(self.contourHeights[i])
+                fp.write(content +"\r\n")
+            for lst in self.mergeIdx:
+                fp.write(prefix2 + str(lst))
+
+
+        #
+        # box_num = boxes.shape[0]
+        # widths = boxes[:,2] - boxes[:,0]
+        # heights = boxes[:,3] - boxes[:,1]
+        # cxs = (boxes[:,2] + boxes[:,0]) / 2 + self.imgBounds[0]
+        # cys = (boxes[:,3] + boxes[:,1]) / 2
+        # cys = -(self.imgBounds[3]/2 - (cys + self.imgBounds[2]))
+        # with open(filename, 'a') as fp:
+        #     for i in range(box_num):
+        #         fp.write('o : ' + str(cxs[i])+' ' + str(cys[i]) + ' 0 90 '+str(widths[i])+' '+str(heights[i]))
+        #         fp.write('\r\n')
