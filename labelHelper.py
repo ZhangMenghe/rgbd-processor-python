@@ -161,25 +161,32 @@ class labelHelper(object):
         self.mergedLables = mergedLables
 
     def writeObstacles2File(self, filename):
-        print(self.mergeIdx)
-        print(self.contourHeights)
         boxes = self.boundingBoxes.astype("float")
         rotatedBox = np.array(self.rotatedBox, dtype=float)
-        prefix = 'fixedObj : '
+        prefix = 'objFixed : '
         prefix2 = 'group: '
+        vertexIdx = [0,3,2,1]
         with open(filename, 'a') as fp:
             for i, rect in enumerate(self.rotatedRect):
                 content  = prefix
+                # fill vertices
+                vertices = self.rotatedBox[i]
+                for idx in vertexIdx:
+                    content+=str(vertices[idx][0]) + ' ' + str(vertices[idx][1])+ ' '
                 # center, size, angle
                 for idx, item in enumerate(rect):
                     if(idx<2):
                         content += str(item[0]) + ' ' + str(item[1]) + ' '
                     else:
                         content += str(item) + ' '
+
                 content += str(self.boxLabel[i]) + ' ' + str(self.contourHeights[i])
                 fp.write(content +"\r\n")
             for lst in self.mergeIdx:
-                fp.write(prefix2 + str(lst))
+                content = prefix2
+                for item in lst:
+                    content += str(item) + ' '
+                fp.write(content + '\r\n')
 
 
         #
