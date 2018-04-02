@@ -15,12 +15,15 @@ class depth2HeightMskHelper(object):
         self.depthImage = None
         self.HHA = None
         self.heightMap = None
+        #[minX, maxX, minZ, maxZ] in real world
         self.imgbounds = None
         self.heightMatBounds = None
         self.height2Img = None
         self.img2Height = None
+        # contours in heightMap
         self.contours = None
-        self.contourHeights = []
+        # height of each obstacle in heightMap
+        self.contourHeights = None
         self.obstaclBoxes = None
 
     def fit(self, depthAddr = None, rawDepthAddr = None, camAddr=None, generateHAA=True):
@@ -63,18 +66,17 @@ class depth2HeightMskHelper(object):
 
         self.heightMap = np.ones([mat_boundz, mat_boundx], dtype ="float") * np.inf
 
-        # height2Img = np.zeros(heightMap.shape, dtype=int)
         self.height2Img = dict.fromkeys(range(len(self.heightMap.flatten())), [])
 
-        self.img2Height = np.zeros(self.depthImage.shape, dtype=int)
+        self.img2Height = np.zeros((self.depthImage.shape[0], self.depthImage.shape[1], 2), dtype=int)
 
         for i in range(height):
             for j in range(width):
                 tx = roundX[i,j] - self.imgbounds[0]
                 tz = roundZ[i,j]
+                self.img2Height[i,j] = [mat_boundz - tz, tx]
                 # boudz-z cause we will flipup heightMap later
                 idx_height = (mat_boundz - tz) * mat_boundx + tx
-                self.img2Height[i,j] = idx_height
                 if(self.height2Img[idx_height]):
                     self.height2Img[idx_height].append(i*width + j)
                 else:
@@ -146,6 +148,7 @@ class depth2HeightMskHelper(object):
         self.detectedBoxes = len(self.obstaclBoxes)
         self.getContourHeight()
     def getContourHeight(self):
+        self.contourHeights = []
         for rect in self.obstaclBoxes:
             cx = int((rect[0] + rect[2])/2)
             cy = int((rect[1] + rect[3])/2)
