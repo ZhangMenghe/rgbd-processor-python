@@ -26,7 +26,7 @@ class labelHelper(object):
         self.imageWithBox = None
         # self.getObstacleLabels()
 
-    def fit(self, depthHelper,labelName=None, labelFile=None):
+    def fit(self, depthHelper,labelName=None, labelFile=None, forwardMethod = True):
         self.imgBounds = depthHelper.imgbounds
         self.contours = depthHelper.contours
         self.contourHeights = depthHelper.contourHeights
@@ -34,9 +34,9 @@ class labelHelper(object):
         self.img2Height = depthHelper.img2Height
         self.boxesFromDepth = depthHelper.obstaclBoxes
         self.heightMapMsk = np.zeros(depthHelper.heightMatBounds, dtype=np.uint8)
-        self.getObstacleLabels(labelName, labelFile)
-
-    def getObstacleLabels(self, labelName, labelFile):
+        # self.getObstacleLabels(labelName, labelFile)
+        self.combineHeightAndLabel(labelName, labelFile, forwardMethod)
+    def combineHeightAndLabel(self, labelName, labelFile, forwardMethod):
         if(self.classifier and labelName):
             labelImg = self.classifier.fit(labelName)
         elif(labelFile):
@@ -44,6 +44,14 @@ class labelHelper(object):
         else:
             return False
         labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
+        if(forwardMethod):
+            self.getObstacleLabels(labelImg)
+        else:
+            self.getObstacleRealWorld(labelImg)
+    def getObstacleRealWorld(self, labelImg):
+        #todo
+    def getObstacleLabels(self, labelImg):
+
         keepCluster = []
         boundx = self.heightMapMsk.shape[1]
         for idx, cnt in enumerate(self.contours):
@@ -187,16 +195,3 @@ class labelHelper(object):
                 for item in lst:
                     content += str(item) + ' '
                 fp.write(content + '\r\n')
-
-
-        #
-        # box_num = boxes.shape[0]
-        # widths = boxes[:,2] - boxes[:,0]
-        # heights = boxes[:,3] - boxes[:,1]
-        # cxs = (boxes[:,2] + boxes[:,0]) / 2 + self.imgBounds[0]
-        # cys = (boxes[:,3] + boxes[:,1]) / 2
-        # cys = -(self.imgBounds[3]/2 - (cys + self.imgBounds[2]))
-        # with open(filename, 'a') as fp:
-        #     for i in range(box_num):
-        #         fp.write('o : ' + str(cxs[i])+' ' + str(cys[i]) + ' 0 90 '+str(widths[i])+' '+str(heights[i]))
-        #         fp.write('\r\n')
