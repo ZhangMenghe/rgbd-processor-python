@@ -6,6 +6,6 @@ def writeHeights2txtfile(outfilename, heightMap):
             outfile.write(np.array_str(row).replace('\n', ''))
             outfile.write('\r\n')
 def saveOpencvMatrix(filename, matrix):
-    ofile = cv2.FileStorage(filename+'.yml', cv2.FILE_STORAGE_WRITE)
+    ofile = cv2.FileStorage(filename, cv2.FILE_STORAGE_WRITE)
     ofile.write("floatdata", matrix)
     ofile.release()

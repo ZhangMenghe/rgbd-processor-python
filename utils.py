@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import imageio
-from camera import processCamMat
+from camera import processCamMat, getCameraParam
 
 def setupInputMatrix(depthAddr, rawDepthAddr, camAddr):
     root = 'C:/Projects/rgbd-processor-python/imgs/'
@@ -11,8 +11,11 @@ def setupInputMatrix(depthAddr, rawDepthAddr, camAddr):
     depthAddr = root+depthName if depthAddr == None else depthAddr
     rawDepthAddr = root+rawDepthName if rawDepthAddr==None else rawDepthAddr
     camAddr = root+camName if camAddr == None else camAddr
-    with open(camAddr, 'r') as camf:
-        cameraMatrix = processCamMat(camf.readlines())
+    if(camAddr == None):
+        cameraMatrix = getCameraParam()
+    else:
+        with open(camAddr, 'r') as camf:
+            cameraMatrix = processCamMat(camf.readlines())
     # cameraMatrix = np.array([[518.857901, 0.000000, 284.582449],[0.000000, 519.469611, 208.736166],[0.000000, 0.000000, 1.000000]])
     depthImage = imageio.imread(depthAddr).astype(float)/100
     rawDepth = imageio.imread(rawDepthAddr).astype(float)/1000

@@ -67,7 +67,7 @@ rawDepth = imageio.imread(rawDepthAddr).astype(float)/10
 missingMask = (rawDepth == 0)
 cameraMatrix = np.array([[518.857901, 0.000000, 284.582449],[0.000000, 519.469611, 208.736166],[0.000000, 0.000000, 1.000000]])
 heightMap = getHeightMap(depthImage,rawDepth,cameraMatrix)
-# saveOpencvMatrix("heightMapData", heightMap)
+# saveOpencvMatrix("heightMapData.yml", heightMap)
 # outfile = open("heightMaptxt.txt","w")
 # for row in heightMap:
 #     outfile.write(np.array_str(row).replace('\n', ''))
