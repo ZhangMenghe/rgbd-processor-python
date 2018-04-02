@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import math
 from depthImgProcessor import processDepthImage
 from utils import setupInputMatrix,non_max_supression
 
@@ -12,6 +13,7 @@ class depth2HeightMskHelper(object):
         self.area_threshold_min_ratio = area_threshold_min_ratio
         self.area_threshold_max_ratio = area_threshold_max_ratio
         self.depthImage = None
+        self.HHA = None
         self.heightMap = None
         self.imgbounds = None
         self.heightMatBounds = None
@@ -21,15 +23,30 @@ class depth2HeightMskHelper(object):
         self.contourHeights = []
         self.obstaclBoxes = None
 
-    def fit(self, depthAddr = None, rawDepthAddr = None, camAddr=None):
+    def fit(self, depthAddr = None, rawDepthAddr = None, camAddr=None, generateHAA=True):
         self.depthImage, missingMask, cameraMatrix = setupInputMatrix(depthAddr, rawDepthAddr, camAddr)
-        self.getHeightMap(missingMask, cameraMatrix)
+        self.getHeightMap(missingMask, cameraMatrix, generateHAA)
         self.getObstacleMask()
 
-    def getHeightMap(self, missingMask, cameraMatrix):
+    def getHHAImage(self, pc, N, yDir, h):
+        tmp = np.multiply(N, yDir)
+        # with np.errstate(invalid='ignore'):
+        acosValue = np.minimum(1,np.maximum(-1,np.sum(tmp, axis=2)))
+        angle = np.array([math.degrees(math.acos(x)) for x in acosValue.flatten()])
+        angle = np.reshape(angle, h.shape)
+
+        pc[:,:,2] = np.maximum(pc[:,:,2], 100)
+        I = np.zeros(pc.shape)
+        I[:,:,0] = 31000/pc[:,:,2]
+        I[:,:,1] = h
+        I[:,:,2] = (angle + 128-90)
+        self.HHA = I.astype(np.uint8)
+
+    def getHeightMap(self, missingMask, cameraMatrix, generateHAA):
         height, width = self.depthImage.shape
         pc, N, yDir, h, R = processDepthImage(self.depthImage, missingMask, cameraMatrix)
-
+        if(generateHAA):
+            self.getHHAImage(pc, N, yDir, h)
         # where each pixel will be located in 3d world
         roundX = pc[:,:,0].astype(int)
         roundZ = pc[:,:,2].astype(int)

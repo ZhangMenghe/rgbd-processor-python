@@ -27,7 +27,7 @@ class depth2maskTester(object):
             return None
         self.labelHelper.fit(self.depthHelper, labelName = imgName)
 
-    def plotAndOutput(self,heightMapFile = None,plotOnScreen=False,outImageWithBox=None, outForInputFile = None):
+    def plotAndOutput(self,imageName,heightMapFile = None,plotOnScreen=False,outImageWithBox=None, outForInputFile = None):
         # write heightMap without boundingbox, save as png image
         if(heightMapFile):
             imageio.imwrite(heightMapFile, self.depthHelper.heightMap)
@@ -45,7 +45,8 @@ class depth2maskTester(object):
         if(outForInputFile):
             self.labelHelper.writeObstacles2File(outForInputFile)
 
-
+        # imageio.imwrite("E:/depth/"+imageName+'.png', self.depthHelper.depthImage)
+        # imageio.imwrite("E:/heightMsk/"+imageName+'.png', self.labelHelper.heightMapMsk)
 if __name__ == "__main__":
     rootpath = 'C:/Projects/SUNRGB-dataset/'
     labelFolderList = ['SUNRGBD-test_images/', 'testing/hha/']
@@ -58,7 +59,7 @@ if __name__ == "__main__":
     chooseSplit = "testing"
     resForInputFile = "layoutParam.txt"
     startIdx = 1861
-    testList=np.array([1972])
+    testList=np.array([2322])
     # testList=np.array([1970,1972,1975,2115,2243,2291,2293,2295,2297,2300,2321,2322,2330,2342,2348,2349,2352,2354,2377,2411,2441,2490])
     offsetTestList = testList - startIdx
     numOfTest = max(offsetTestList)
@@ -89,7 +90,7 @@ if __name__ == "__main__":
         lFile = outputpath + '/pred/pred'+str(idx+startIdx) +'.png'
 
         d2tTester.fit(depthAddr = depthAddr, rawDepthAddr = rawDepthAddr, camAddr=camAddr, imgName = str(idx+startIdx))
-        d2tTester.plotAndOutput(heightMapFile = heightFile,plotOnScreen=False,outImageWithBox=resFile, outForInputFile = resForInputFile)
+        d2tTester.plotAndOutput(str(idx+startIdx),heightMapFile = heightFile,plotOnScreen=False,outImageWithBox=resFile, outForInputFile = resForInputFile)
 
 # if __name__ == "__main__":
 #     if(len(argv)<2):

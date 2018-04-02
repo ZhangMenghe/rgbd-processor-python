@@ -5,6 +5,7 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from depthImgProcessor import processDepthImage
+from write2FileHelper import saveOpencvMatrix
 def getHeightMap(depthImage, missingMask, cameraMatrix):
     height, width = depthImage.shape
 
@@ -29,7 +30,7 @@ def getHeightMap(depthImage, missingMask, cameraMatrix):
     print(maxZ)
     print(minX)
     print(minZ)
-    
+
     mat_boundx = max(x_range, maxX+1)
     mat_boundz = max(z_range, maxZ+1)
 
@@ -38,10 +39,10 @@ def getHeightMap(depthImage, missingMask, cameraMatrix):
     for i in range(height):
         for j in range(width):
             tx = roundX[i,j]
-            tz = mat_boundz - roundZ[i,j]
+            tz = roundZ[i,j]
             heightMap[tz,tx] = min(h[i,j], heightMap[tz,tx])
     heightMap[np.where(heightMap==np.inf)] = 0
-    heightMap = np.fliplr(heightMap)
+    # heightMap = np.fliplr(heightMap)
     # colorMap = cv2.cvtColor(heightMap, cv2.COLOR_GRAY2BGR)
     # cv2.cvtcolor(heightMap, colorMap, COLOR_GRAY2BGR)
     imageio.imwrite('height2.png', heightMap)
@@ -59,15 +60,16 @@ def getHeightMap(depthImage, missingMask, cameraMatrix):
 
     return heightMap
 
-depthAddr = "depth.png"
-rawDepthAddr = "rawdepth.png"
-depthImage = imageio.imread(depthAddr).astype(float)/100
-rawDepth = imageio.imread(rawDepthAddr).astype(float)/1000
+depthAddr = "imgs/depth.png"
+rawDepthAddr = "imgs/rawdepth.png"
+depthImage = imageio.imread(depthAddr).astype(float)
+rawDepth = imageio.imread(rawDepthAddr).astype(float)/10
 missingMask = (rawDepth == 0)
 cameraMatrix = np.array([[518.857901, 0.000000, 284.582449],[0.000000, 519.469611, 208.736166],[0.000000, 0.000000, 1.000000]])
 heightMap = getHeightMap(depthImage,rawDepth,cameraMatrix)
-outfile = open("heightMaptxt.txt","w")
-for row in heightMap:
-    outfile.write(np.array_str(row).replace('\n', ''))
-    outfile.write('\r\n')
-outfile.close()
+# saveOpencvMatrix("heightMapData", heightMap)
+# outfile = open("heightMaptxt.txt","w")
+# for row in heightMap:
+#     outfile.write(np.array_str(row).replace('\n', ''))
+#     outfile.write('\r\n')
+# outfile.close()

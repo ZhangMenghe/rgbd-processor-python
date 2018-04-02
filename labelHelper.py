@@ -17,22 +17,29 @@ class labelHelper(object):
         # refined results with labels from NN result
         self.boundingBoxes = None
         self.boxesFromDepth = None
-        self.rotatedBox = []
-        self.rotatedRect = []
+        self.rotatedBox = None
+        self.rotatedRect = None
         self.heightMapMsk = None
-        self.boxLabel = []
-        self.mergedLables = []
-        self.mergeIdx = []
+        self.boxLabel = None
+        self.mergedLables = None
+        self.mergeIdx = None
         self.imageWithBox = None
         # self.getObstacleLabels()
 
     def fit(self, depthHelper,labelName=None, labelFile=None):
+        self.boxLabel = []
+        self.mergeIdx = []
+        self.rotatedBox = []
+        self.rotatedRect = []
+        self.mergedLables = []
         self.imgBounds = depthHelper.imgbounds
         self.contours = depthHelper.contours
         self.contourHeights = depthHelper.contourHeights
         self.height2Img = depthHelper.height2Img
         self.img2Height = depthHelper.img2Height
         self.boxesFromDepth = depthHelper.obstaclBoxes
+        self.HHA = depthHelper.HHA
+        self.heightMap = depthHelper.heightMap
         self.heightMapMsk = np.zeros(depthHelper.heightMatBounds, dtype=np.uint8)
         self.getObstacleLabels(labelName, labelFile)
 
@@ -74,7 +81,6 @@ class labelHelper(object):
             self.boxLabel.append(objlabel)
             keepCluster.append(idx)
         #now use label, to decide whether to merge those boundingboxes
-
         self.mergeObjects(self.boxesFromDepth[keepCluster])
         self.contourHeights = np.array(self.contourHeights)[keepCluster]
         self.contours = self.contours[keepCluster]
@@ -97,7 +103,9 @@ class labelHelper(object):
         self.getImageWithBox()
         return True
     def getImageWithBox(self):
-        self.imageWithBox = np.copy(self.heightMapMsk)
+        self.imageWithBox = np.copy(self.heightMap)
+        self.imageWithBox = self.imageWithBox.astype(np.uint8)
+        cv2.drawContours(self.imageWithBox, self.rotatedBox, -1, 255, thickness=1)
         self.imageWithBox = drawBoundingBox(self.imageWithBox, self.boundingBoxes)
         cv2.drawContours(self.imageWithBox, self.rotatedBox, -1, (255,255,0), 2)
     def getBoxInfo(self, boxes):
@@ -116,7 +124,8 @@ class labelHelper(object):
                 if(ratio>ratioThresh):
                     return [i,j]
         return None
-    def checkAndMergeBoxes(self, boxes):
+    def checkAndMergeBoxes(self, boundingboxes):
+        boxes = np.copy(boundingboxes)
         recordLst = [[x] for x in range(len(boxes))]
         boxesInfo = self.getBoxInfo(boxes)
         while(True):
@@ -144,7 +153,8 @@ class labelHelper(object):
         mergedBoxes = []
         mergedLables = []
         if(numOfLabel == numOfBox):
-            return boundingboxes
+            self.boundingBoxes = boundingboxes
+            return
         for label in np.unique(self.boxLabel):
             index = np.where(self.boxLabel==label)
             if(len(index[0]) == 1):
