@@ -11,9 +11,10 @@ import imageio
 from utils import checkDirAndCreate
 from depth2HeightMskHelper import *
 from labelHelper import *
-from pspClassifier import *
 import sys
 sys.path.append('C:/Projects/semantic-segmentation')
+from pspClassifier import *
+
 from write2FileHelper import saveOpencvMatrix
 
 class depth2maskTester(object):
@@ -26,7 +27,7 @@ class depth2maskTester(object):
         self.depthHelper.fit(depthAddr,rawDepthAddr,camAddr)
         if(self.depthHelper.detectedBoxes == 0):
             return None
-        self.labelHelper.fit(self.depthHelper, labelName = imgName)
+        self.labelHelper.fit(self.depthHelper, labelName = imgName, forwardMethod = False)
     def save(self, obstacleName, heigtMapName):
         self.labelHelper.writeObstacles2File(obstacleName)
         saveOpencvMatrix(heigtMapName, self.depthHelper.heightMap)
@@ -49,8 +50,8 @@ class depth2maskTester(object):
             self.labelHelper.writeObstacles2File(outForInputFile)
 
 if __name__ == "__main__":
-    rootpath = "C:/Projects/SUNRGB-dataset/_testing/"
-    modelFilePath = "pspnet_sunrgbd_sun_model.pkl"
+    rootpath = "C:/Projects/SUNRGB-dataset/_testing/smallTests/"
+    modelFilePath = "C:/Projects/semantic-segmentation/pspnet_sunrgbd_sun_model2_resume.pkl"
     srcImgPath = rootpath+'imgs/'
     d2tTester = depth2maskTester(rootpath, srcImgPath, modelFilePath)
     filenameSet = listdir(srcImgPath)
