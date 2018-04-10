@@ -93,13 +93,14 @@ class depth2HeightMskHelper(object):
         self.contourHeights = None
         self.obstaclBoxes = None
         self.img2RealCoord = None
-    def fit(self, depthAddr = None, rawDepthAddr = None, camAddr=None, generateHAA=True):
+    def fit(self, depthAddr = None, rawDepthAddr = None, camAddr=None, generateHAA=True, forwardMethod = False):
         self.depthImage, missingMask, cameraMatrix = setupInputMatrix(depthAddr, rawDepthAddr, camAddr)
         self.getHeightMap(missingMask, cameraMatrix, generateHAA)
-        tmpContours, mapsize = getObstacleMask(self.heightMap)
-        self.contours, self.obstaclBoxes,_ = RemoveContourOverlapping(tmpContours, mapsize)
-        self.detectedBoxes = len(self.obstaclBoxes)
-        self.contourHeights =  getContourHeight(self.obstaclBoxes, self.heightMap)
+        if(forwardMethod):
+            tmpContours, mapsize = getObstacleMask(self.heightMap)
+            self.contours, self.obstaclBoxes,_ = RemoveContourOverlapping(tmpContours, mapsize)
+            self.detectedBoxes = len(self.obstaclBoxes)
+            self.contourHeights =  getContourHeight(self.obstaclBoxes, self.heightMap)
     def getHHAImage(self, pc, N, yDir, h):
         tmp = np.multiply(N, yDir)
         # with np.errstate(invalid='ignore'):

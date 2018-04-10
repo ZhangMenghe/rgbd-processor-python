@@ -23,11 +23,11 @@ class depth2maskTester(object):
         self.depthHelper = depth2HeightMskHelper()
         self.classifier = pspClassifier(rootpath, srcImgPath, modelFile = modelFilePath)
         self.labelHelper = labelHelper(classifier = self.classifier)
-    def fit(self,depthAddr = None, rawDepthAddr = None, camAddr=None, labelFile = None, imgName = None):
-        self.depthHelper.fit(depthAddr,rawDepthAddr,camAddr)
-        if(self.depthHelper.detectedBoxes == 0):
+    def fit(self,depthAddr = None, rawDepthAddr = None, camAddr=None, labelFile = None, imgName = None, forwardMethod = False):
+        self.depthHelper.fit(depthAddr,rawDepthAddr,camAddr,forwardMethod=forwardMethod)
+        if(forwardMethod and self.depthHelper.detectedBoxes == 0):
             return None
-        self.labelHelper.fit(self.depthHelper, labelName = imgName, forwardMethod = False)
+        self.labelHelper.fit(self.depthHelper, labelName = imgName, forwardMethod = forwardMethod)
     def save(self, obstacleName, heigtMapName):
         self.labelHelper.writeObstacles2File(obstacleName)
         saveOpencvMatrix(heigtMapName, self.depthHelper.heightMap)
