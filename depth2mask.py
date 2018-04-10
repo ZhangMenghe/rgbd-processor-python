@@ -55,7 +55,8 @@ if __name__ == "__main__":
     srcImgPath = rootpath+'imgs/'
     d2tTester = depth2maskTester(rootpath, srcImgPath, modelFilePath)
     # filenameSet = listdir(srcImgPath)
-    filenameSet = np.array([2503])
+    #
+    filenameSet = np.array([2276,2487,2501,2483])
     for name in filenameSet:
         # pureName = name.split('.')[0]
         depthAddr  = rootpath + 'depth/'+str(name)+'.png'
