@@ -3,7 +3,8 @@ import cv2
 import math
 from depthImgProcessor import processDepthImage
 from utils import setupInputMatrix,non_max_supression
-
+from plotHelper import plot3dHeightMap
+from utils import rotatePC
 def getContourHeight(obstaclBoxes, heightMap):
     contourHeights = []
     for rect in obstaclBoxes:
@@ -116,12 +117,14 @@ class depth2HeightMskHelper(object):
     def getHeightMap(self, missingMask, cameraMatrix, generateHAA):
         height, width = self.depthImage.shape
         pc, N, yDir, h, R = processDepthImage(self.depthImage, missingMask, cameraMatrix)
+        pcRot = rotatePC(pc, R)
         if(generateHAA):
             self.getHHAImage(pc, N, yDir, h)
+
         # where each pixel will be located in 3d world
-        roundX = pc[:,:,0].astype(int)
-        roundZ = pc[:,:,2].astype(int)
-        self.img2RealCoord = pc.astype(int)
+        roundX = pcRot[:,:,0].astype(int)
+        roundZ = pcRot[:,:,2].astype(int)
+
         # [minX, maxX, minZ, maxZ]
         self.imgbounds = [np.min(roundX), np.max(roundX), np.min(roundZ), np.max(roundZ)]
 
@@ -152,5 +155,6 @@ class depth2HeightMskHelper(object):
                 if h[i,j]<self.heightMap[tz,tx]:
                     self.heightMap[tz,tx] = h[i,j]
         self.heightMap[np.where(self.heightMap==np.inf)] = 0
+        # plot3dHeightMap(mat_boundx,mat_boundz,self.heightMap)
         self.heightMap = np.flipud(self.heightMap)
         self.heightMatBounds = [mat_boundz, mat_boundx]

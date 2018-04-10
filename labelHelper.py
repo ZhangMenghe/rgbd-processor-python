@@ -63,39 +63,43 @@ class labelHelper(object):
         else:
             return False
         labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
+        # decoded = self.classifier.dataset.decode_segmap(labelImg)
+        # cv2.imshow("resized", decoded)
+        # cv2.waitKey(0)
         if(forwardMethod):
             self.getObstacleLabels(labelImg)
         else:
             self.getObstacleRealWorld(labelImg)
     def getObstacleRealWorld(self, labelImg):
-        denoteList = [n for n in np.unique(labelImg) if n not in [1,8,9,11]]
+        denoteList =[n for n in np.unique(labelImg) if n not in [1,8,9,11]]
+        # denoteList =np.unique(labelImg)  #
         for cate in denoteList:
             mappedLoc = self.img2Height[np.where(labelImg==cate)]#self.img2RealCoord[floorLocs]
             for loc in mappedLoc:
                 self.sceneMat[loc[0],loc[1]] = cate
 
         logicalRes = np.logical_and(self.sceneMat, self.heightMap)
-        self.sceneMat[logicalRes == 0] = 0
+        # self.sceneMat[logicalRes == 0] = 0
         for cate in denoteList:
             cate_sceneMat = np.zeros(self.heightMap.shape)
             cate_sceneMat[self.sceneMat == cate] = 1
+            # cv2.imshow("catelabel",cate_sceneMat)
+            # cv2.waitKey(0)
             self.sceneMatList.append(cate_sceneMat)
         self.boxLabel = denoteList
         self.getObstacleMaskFromLabeledMask()
-        # cv2.imshow("label",self.sceneMat)
-        # cv2.imshow("height",self.heightMap)
+        cv2.imshow("label",self.sceneMat)
+        cv2.imshow("height",self.heightMap)
         # cv2.imshow("logical",logicalRes)
-        # cv2.waitKey(0)
+        cv2.waitKey(0)
     def getObstacleMaskFromLabeledMask(self):
         labels = []
         contourList = []
-        print(self.boxLabel)
         for i, cate_sceneMat in enumerate(self.sceneMatList):
             cate_contours,mapsize = getObstacleMask(cate_sceneMat)
             cate_contours,_,_ = RemoveContourOverlapping(cate_contours,mapsize,threshold=0.5)
             contourList.extend(cate_contours)
             labels.extend([ self.boxLabel[i] ]* len(cate_contours))
-            print(labels)
         contours,boundingBoxes,pickupIds = RemoveContourOverlapping(contourList,mapsize,threshold=0.5)
         for i, cnt in enumerate(contours):
             rect = cv2.minAreaRect(cnt)
@@ -105,14 +109,14 @@ class labelHelper(object):
             self.rotatedRect.append(rect)
         self.boxLabel = np.array(labels)[pickupIds]
         self.contourHeights =  getContourHeight(boundingBoxes, self.heightMap)
-        print(self.contourHeights)
-        # print("labels-" + str(self.boxLabel))
-        # rgbView =  np.zeros([self.sceneMat.shape[0],self.sceneMat.shape[1],3],dtype= np.uint8)
-        # for cate in np.unique(self.sceneMat):
-        #     rgbView[self.sceneMat == cate] = self.labelColor[cate]
-        # res = cv2.drawContours(rgbView, self.rotatedBox, -1,  (0,255,0), 2)
-        # cv2.imshow("res", rgbView)
-        # cv2.waitKey(0)
+
+        print("labels-" + str(self.boxLabel))
+        rgbView =  np.zeros([self.sceneMat.shape[0],self.sceneMat.shape[1],3],dtype= np.uint8)
+        for cate in np.unique(self.sceneMat):
+            rgbView[self.sceneMat == cate] = self.labelColor[cate]
+        res = cv2.drawContours(rgbView, self.rotatedBox, -1,  (0,255,0), 2)
+        cv2.imshow("res", rgbView)
+        cv2.waitKey(0)
     def getObstacleLabels(self, labelImg):
         keepCluster = []
         boundx = self.heightMapMsk.shape[1]
@@ -239,7 +243,7 @@ class labelHelper(object):
         prefix = 'objFixed : '
         prefix2 = 'group: '
         vertexIdx = [0,3,2,1]
-        with open(filename, 'a') as fp:
+        with open(filename, 'w') as fp:
             for i, rect in enumerate(self.rotatedRect):
                 content  = prefix
                 # fill vertices

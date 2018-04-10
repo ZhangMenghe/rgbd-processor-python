@@ -50,16 +50,17 @@ class depth2maskTester(object):
             self.labelHelper.writeObstacles2File(outForInputFile)
 
 if __name__ == "__main__":
-    rootpath = "C:/Projects/SUNRGB-dataset/_testing/smallTests/"
+    rootpath = "C:/Projects/SUNRGB-dataset/_training/"
     modelFilePath = "C:/Projects/semantic-segmentation/pspnet_sunrgbd_sun_model2_resume.pkl"
     srcImgPath = rootpath+'imgs/'
     d2tTester = depth2maskTester(rootpath, srcImgPath, modelFilePath)
-    filenameSet = listdir(srcImgPath)
+    # filenameSet = listdir(srcImgPath)
+    filenameSet = np.array([2503])
     for name in filenameSet:
-        pureName = name.split('.')[0]
-        depthAddr  = rootpath + 'depth/'+pureName+'.png'
-        rawDepthAddr = rootpath + 'depth_raw/'+pureName+'.png'
-        d2tTester.fit(depthAddr = depthAddr, rawDepthAddr = rawDepthAddr, imgName = name)
+        # pureName = name.split('.')[0]
+        depthAddr  = rootpath + 'depth/'+str(name)+'.png'
+        rawDepthAddr = rootpath + 'depth_r/'+str(name)+'.png'
+        d2tTester.fit(depthAddr = depthAddr, rawDepthAddr = rawDepthAddr, imgName = str(name) +'.jpg')
  # if __name__ == "__main__":
  #    rootpath = 'C:/Projects/SUNRGB-dataset/'
  #    labelFolderList = ['SUNRGBD-test_images/', 'testing/hha/']
