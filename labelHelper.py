@@ -30,7 +30,7 @@ class labelHelper(object):
         self.sceneMat = None
         self.shrinkF = shrinkF
         self.cate = ["unknown", "floor ","sofa ","chair ","bed ","NightStand","shelf","table","wall","onwallObjs","otherFurniture","ceiling"]
-        self.labelColor = {1:[173,216,230], 2:[139, 0 ,139], 3:[255,0,0], 4:[156, 156, 156], 5:[0,255,0],\
+        self.labelColor = {0:[0,0,0],1:[173,216,230], 2:[139, 0 ,139], 3:[255,0,0], 4:[156, 156, 156], 5:[0,255,0],\
         6:[255,165,0], 7:[173,255,47],8:[255, 228, 225],9:[159, 121, 238],10:[139,69,0],11:[255,106,106],12:[0,0,255],13:[255,2552,255]}
 
         # self.labelDict = {"bed":1, "books":2, "ceiling":3, "chair":4, "floor":5, "furniture":6, "objects":7, "pics":8, "sofa":9, "table":10, "tv":11, "wall":12, "window":13 }
@@ -254,7 +254,6 @@ class labelHelper(object):
         self.mergedLables = mergedLables
 
     def writeObstacles2File(self, filename):
-        boxes = self.boundingBoxes.astype("float")
         rotatedBox = np.array(self.rotatedBox, dtype=float)
         prefix = 'objFixed : '
         prefix2 = 'group: '
