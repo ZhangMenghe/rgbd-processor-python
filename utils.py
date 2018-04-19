@@ -2,7 +2,19 @@ import numpy as np
 import os
 import imageio
 from camera import processCamMat, getCameraParam
+def rotateAroundPoint(center, pos, s, c):
+    #translate point back to origin:
+    pos[0] -= center[0]
+    pos[1] -= center[1]
 
+    #rotate point
+    xnew = pos[0] * c - pos[1] * s
+    ynew = pos[0] * s + pos[1] * c
+
+    #translate point back:
+    xnew += center[0]
+    ynew += center[1]
+    return xnew, ynew
 def setupInputMatrix(depthAddr, rawDepthAddr, camAddr):
     root = 'C:/Projects/rgbd-processor-python/imgs/'
     depthName = "depth.png"

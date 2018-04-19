@@ -1,5 +1,8 @@
 import numpy as np
 import cv2
+from scipy import stats
+import matplotlib.pyplot as plt
+from utils import rotateAroundPoint
 from plotHelper import drawBoundingBox
 from depth2HeightMskHelper import getObstacleMask, RemoveContourOverlapping, getContourHeight
 
@@ -10,7 +13,7 @@ class labelHelper(object):
     """docstring for labelHelper."""
     def __init__(self, classifier = None, fwRemovalRatio = 0.8, shrinkF = 1.5):
         # imgBounds: minx, maxx, minz, maxz
-        self.imgBounds = None
+        self.imgbounds = None
         self.contours = None
         self.height2Img = None
         self.img2Height = None
@@ -30,7 +33,7 @@ class labelHelper(object):
         self.sceneMat = None
         self.shrinkF = shrinkF
         self.cate = ["unknown", "floor ","sofa ","chair ","bed ","NightStand","shelf","table","wall","onwallObjs","otherFurniture","ceiling"]
-        self.labelColor = {0:[0,0,0],1:[173,216,230], 2:[139, 0 ,139], 3:[255,0,0], 4:[156, 156, 156], 5:[0,255,0],\
+        self.labelColor = {0:[0,0,0], 1:[173,216,230], 2:[139, 0 ,139], 3:[255,0,0], 4:[156, 156, 156], 5:[0,255,0],\
         6:[255,165,0], 7:[173,255,47],8:[255, 228, 225],9:[159, 121, 238],10:[139,69,0],11:[255,106,106],12:[0,0,255],13:[255,2552,255]}
 
         # self.labelDict = {"bed":1, "books":2, "ceiling":3, "chair":4, "floor":5, "furniture":6, "objects":7, "pics":8, "sofa":9, "table":10, "tv":11, "wall":12, "window":13 }
@@ -43,7 +46,7 @@ class labelHelper(object):
         self.rotatedRect = []
         self.mergedLables = []
         self.sceneMatList =[]
-        self.imgBounds = depthHelper.imgbounds
+        self.imgbounds = depthHelper.imgbounds
         self.contours = depthHelper.contours
         self.contourHeights = depthHelper.contourHeights
         self.height2Img = depthHelper.height2Img
@@ -54,6 +57,7 @@ class labelHelper(object):
         self.img2RealCoord = depthHelper.img2RealCoord
         self.heightMapMsk = np.zeros(depthHelper.heightMatBounds, dtype=np.uint8)
         self.sceneMat = np.zeros([int(self.heightMap.shape[0]/self.shrinkF)+1,int(self.heightMap.shape[1]/self.shrinkF)+1 ])
+        self.camCenter = (int(-self.imgbounds[0]- self.sceneMat.shape[1]/2), int(self.sceneMat.shape[0] / 2 - (self.imgbounds[3]- self.imgbounds[2])))
         # self.getObstacleLabels(labelName, labelFile)
         self.combineHeightAndLabel(labelName, labelFile, forwardMethod)
     def combineHeightAndLabel(self, labelName, labelFile, forwardMethod):
@@ -64,16 +68,46 @@ class labelHelper(object):
         else:
             return False
         labelImg = cv2.resize(labelImg, (self.img2Height.shape[1], self.img2Height.shape[0]), interpolation=cv2.INTER_NEAREST).astype(int)
-        # decoded = self.classifier.dataset.decode_segmap(labelImg)
+        decoded = self.classifier.dataset.decode_segmap(labelImg)
         # cv2.imshow("resized", decoded)
         # cv2.waitKey(0)
         if(forwardMethod):
             self.getObstacleLabels(labelImg)
         else:
             self.getObstacleRealWorld(labelImg)
+    def fitWall(self, xdata, ydata):
+        samplerLoc = np.where(np.logical_and(xdata<25, xdata>-25))
+        sx, sy = xdata[samplerLoc], ydata[samplerLoc]
+        slope, intercept, r_value, p_value, std_err = stats.linregress(sx, sy)
+        angle = np.arctan(slope)
+        cs,se = np.cos(angle),np.sin(angle)
+        self.alignWallAngel = (-se, cs)
+        # x_rot,y_rot = rotateAroundPoint(self.camCenter, np.vstack([xdata,ydata]), -se, cs)
+        # x_rots,y_rots = rotateAroundPoint(self.camCenter, np.vstack([sx,sy]), -se, cs)
+        # slope2, intercept2, r_value2, p_value2, std_err2 = stats.linregress(x_rots, y_rots)
+        # plt.plot(x_rot, y_rot, 'o', label='original data')
+        # plt.plot(sx, intercept + slope*sx, 'r', label='fitted line')
+        # plt.legend()
+        # plt.show()
     def getObstacleRealWorld(self, labelImg):
         denoteList =[n for n in np.unique(labelImg) if n not in [1,8,9,11]]
-        # denoteList =np.unique(labelImg)
+        # WALL
+        wallMat = np.zeros(self.sceneMat.shape)
+        ybound, xbound = self.sceneMat.shape[0] /2, self.sceneMat.shape[1] /2
+        xdata,ydata = [],[]
+        for cate in [8,9]:
+            mappedLoc = self.img2Height[np.where(labelImg==cate)]#self.img2RealCoord[floorLocs]
+            for loc in mappedLoc:
+                xdata.append(int(loc[1]/self.shrinkF))
+                ydata.append(int(loc[0]/self.shrinkF))
+                wallMat[ydata[-1],xdata[-1]] = 255
+        xdata = (np.array(xdata) - xbound).astype(int)
+        ydata = (ybound - np.array(ydata)).astype(int)
+
+        cv2.imshow("wall", wallMat)
+        # cv2.waitKey(0)
+        self.fitWall(xdata, ydata)
+
         for cate in denoteList:
             mappedLoc = self.img2Height[np.where(labelImg==cate)]#self.img2RealCoord[floorLocs]
             for loc in mappedLoc:
@@ -91,9 +125,9 @@ class labelHelper(object):
             self.sceneMatList.append(cate_sceneMat)
         self.boxLabel = denoteList
 
-        cv2.imshow("label",self.sceneMat)
+        # cv2.imshow("label",self.sceneMat)
         # cv2.imshow("height",self.heightMap)
-        cv2.waitKey(0)
+        # cv2.waitKey(0)
         self.getObstacleMaskFromLabeledMask()
 
     def getObstacleMaskFromLabeledMask(self):
@@ -131,8 +165,10 @@ class labelHelper(object):
         for cate in np.unique(self.sceneMat):
             rgbView[self.sceneMat == cate] = self.labelColor[cate]
         res = cv2.drawContours(rgbView, self.rotatedBox, -1,  (0,255,0), 2)
-        cv2.imshow("res", rgbView)
-        cv2.waitKey(0)
+
+        # cv2.circle(rgbView, (int(self.sceneMat.shape[1]/2), int(self.imgbounds[3] - self.imgbounds[2])), 5, (0,0,255))
+        # cv2.imshow("res", rgbView)
+        # cv2.waitKey(0)
     def getObstacleLabels(self, labelImg):
         keepCluster = []
         boundx = self.heightMapMsk.shape[1]
@@ -252,8 +288,27 @@ class labelHelper(object):
                     self.mergeIdx.append(index[0][lst])
         self.boundingBoxes = np.array(mergedBoxes)
         self.mergedLables = mergedLables
-
+    def alignWall(self):
+        rgbView =  np.zeros([self.sceneMat.shape[0],self.sceneMat.shape[1],3],dtype= np.uint8)
+        rotBoxes = []
+        rotRects = []
+        alignAngle = np.rad2deg(np.arctan(self.alignWallAngel[0]/ self.alignWallAngel[1]))
+        ybound, xbound = self.sceneMat.shape[0] /2, self.sceneMat.shape[1] /2
+        for i,box in enumerate(self.rotatedBox):
+            xdata = (np.array(box).T[0] - xbound).astype(int)
+            ydata = (ybound - np.array(box).T[1]).astype(int)
+            xrot, yrot = rotateAroundPoint(self.camCenter, np.vstack([xdata,ydata]), self.alignWallAngel[0], self.alignWallAngel[1])
+            xrot = xrot+xbound
+            yrot = ybound - yrot
+            rotBoxes.append(np.vstack([xrot,yrot]).astype(int).T)
+            rotRects.append([(xrot[0] + xrot[2])/2, (yrot[0] + yrot[2])/2, self.rotatedRect[i][1][0], self.rotatedRect[i][1][1], -(self.rotatedRect[i][2] + alignAngle]))
+        self.alignedRotBox = rotBoxes
+        self.alignedRotRect = rotRects
+        res = cv2.drawContours(rgbView, rotBoxes, -1,  (0,255,0), 2)
+        cv2.imshow("aftRot", rgbView)
+        cv2.waitKey(0)
     def writeObstacles2File(self, filename):
+        self.alignWall()
         rotatedBox = np.array(self.rotatedBox, dtype=float)
         prefix = 'objFixed : '
         prefix2 = 'group: '
